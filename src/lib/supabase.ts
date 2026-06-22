@@ -8,15 +8,27 @@ import { env } from './env';
  * público mínimo. Operações sensíveis NÃO usam este cliente: passam por Edge
  * Functions com service_role no servidor. A service_role key jamais é embutida
  * no bundle.
+ *
+ * Instanciação preguiçosa: em ADAPTER_MODE=mock o app funciona sem Supabase
+ * configurado. O cliente só é criado (e exige URL + anon key) quando realmente
+ * usado.
  */
-export const supabase: SupabaseClient = createClient(
-  env.VITE_SUPABASE_URL,
-  env.VITE_SUPABASE_ANON_KEY,
-  {
+let client: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient {
+  if (client) return client;
+  if (!env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_ANON_KEY) {
+    throw new Error(
+      'Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env ' +
+        '(veja .env.example) para usar o backend real.',
+    );
+  }
+  client = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
-  },
-);
+  });
+  return client;
+}

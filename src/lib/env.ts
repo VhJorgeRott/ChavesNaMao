@@ -11,8 +11,10 @@ import { z } from 'zod';
  */
 const clientEnvSchema = z.object({
   VITE_ADAPTER_MODE: z.enum(['mock', 'live']).default('mock'),
-  VITE_SUPABASE_URL: z.string().url(),
-  VITE_SUPABASE_ANON_KEY: z.string().min(1),
+  // Opcionais: em ADAPTER_MODE=mock o Supabase não é usado. São exigidos só
+  // quando o cliente Supabase é efetivamente instanciado (ver lib/supabase.ts).
+  VITE_SUPABASE_URL: z.string().url().optional(),
+  VITE_SUPABASE_ANON_KEY: z.string().min(1).optional(),
   VITE_ENTRA_CLIENT_ID: z.string().min(1).optional(),
   VITE_ENTRA_TENANT_ID: z.string().min(1).optional(),
   VITE_ENTRA_REDIRECT_URI: z.string().url().optional(),

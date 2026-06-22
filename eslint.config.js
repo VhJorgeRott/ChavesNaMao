@@ -32,4 +32,12 @@ export default tseslint.config(
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // Providers de contexto expõem o Provider + o hook de consumo juntos —
+    // padrão intencional; o aviso de fast-refresh não se aplica.
+    files: ['src/**/*Provider.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 );

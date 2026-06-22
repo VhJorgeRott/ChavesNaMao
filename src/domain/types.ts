@@ -79,3 +79,54 @@ export interface ItemEntrega {
   descricao: string;
   quantidade: number;
 }
+
+export interface Documento {
+  id: string;
+  entregaId: string;
+  tipo: string;
+  storagePath: string;
+  sha256Hash: string;
+  geradoEm: string;
+}
+
+export interface Assinatura {
+  id: string;
+  entregaId: string;
+  documentoId: string;
+  canvasPngPath: string | null;
+  metodo: MetodoAssinatura;
+  ip: string | null;
+  userAgent: string | null;
+  geo: { lat: number; lng: number } | null;
+  assinadaEm: string | null;
+  clicksignDocKey: string | null;
+  clicksignStatus: string | null;
+}
+
+export interface AccessTokenRec {
+  id: string;
+  entregaId: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt: string | null;
+  scope: string;
+  createdAt: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  actor: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  metadata: Record<string, unknown>;
+  at: string;
+}
+
+export interface AppUser {
+  id: string;
+  nome: string;
+  email: string;
+  papel: Papel;
+  ultimaAtividade: string | null;
+}

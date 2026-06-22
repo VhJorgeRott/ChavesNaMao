@@ -5,9 +5,34 @@ modela uma máquina de estados de 6 etapas
 (`ABERTURA → INTEGRACAO → DOCUMENTOS → ASSINATURA → REGISTRO → CONCLUIDA`),
 unificando CRM (CV CRM), ERP (Mega) e assinatura digital (Clicksign) atrás de adapters.
 
-> **Status:** fundação (etapas 1–3 do roteiro). Scaffold + schema/RLS + camada de
-> adapters prontos. Auth (Entra/MSAL), telas, geração de PDF, portal do cliente,
-> Clicksign live, notificações e integrações live vêm nas próximas etapas.
+> **Status:** fundação + telas do MVP. Scaffold, schema/RLS, adapters e a **UI
+> completa** (Início, Unidades, Entregas, Detalhe da entrega e Portal do cliente
+> com canvas de assinatura) já rodam sobre um store em memória com dados mock.
+> Pendentes: auth real (Entra/MSAL ↔ Supabase), persistência no Supabase, geração
+> de PDF no servidor, Clicksign live, notificações e integrações live de CRM/ERP.
+
+## Telas
+
+App interno (shell com sidebar, fundo cinza, tokens da Rottas):
+
+- **Início** (`/dashboard`) — KPIs e entregas recentes.
+- **Unidades** (`/unidades`) — tabela com busca/filtros; "Iniciar entrega" só para unidades liberadas.
+- **Entregas** (`/entregas`) — lista filtrável; clique abre o detalhe.
+- **Detalhe da entrega** (`/entregas/:id`) — timeline das 6 etapas, ação contextual por etapa
+  (validada pela máquina de estados), documentos + hash, geração de link de assinatura, itens e
+  trilha de auditoria.
+- **Usuários** (`/admin`) — gestão de papéis (RBAC); visível só para `admin`.
+
+Portal do cliente (rota pública, sem login):
+
+- **`/portal/:token`** — valida o token, mostra o termo, captura a assinatura no canvas
+  (Pointer Events + `devicePixelRatio`), consentimento opcional de geolocalização, e confirma via
+  adapter Clicksign (mock). Tokens inválidos/expirados/usados retornam resposta idêntica (não vazam
+  existência).
+
+> O `DataProvider` (store em memória, `src/data/`) e a `SessionProvider` (sessão simulada com troca
+> de papel para demo) substituem temporariamente o Supabase/Entra — a troca para o backend real é
+> isolada nessas camadas.
 
 ## Stack
 
@@ -127,8 +152,21 @@ peso jurídico. Decisões aplicadas nesta fundação:
 
 ## Roteiro
 
-Fundação concluída (1–3). Próximas etapas: auth Entra/MSAL + guards (4), telas de
-Unidades e Entregas + transições no servidor (5–6), PDF + Storage + hash (7),
-portal do cliente + canvas (8), Clicksign live + webhook HMAC (9), notificações
-(10), gestão de usuários (11), integrações live CRM/ERP (12), hardening de
-headers/CORS/CSP (13).
+Concluído: fundação (1–3) + **UI das telas internas e do portal** (5, 6, 8 e a tela de gestão de
+usuários da etapa 11) sobre store em memória. Próximas etapas: auth Entra/MSAL + guards (4),
+persistência no Supabase, PDF + Storage + hash no servidor (7), Clicksign live + webhook HMAC (9),
+notificações (10), integrações live CRM/ERP (12), hardening de headers/CORS/CSP (13).
+
+## Troubleshooting
+
+**`Cannot find module @rollup/rollup-win32-x64-msvc` ao rodar `npm run dev`/`build`.**
+O Windows Defender remove o binário nativo do Rollup (falso positivo). Este projeto já contorna isso
+com um override para a build WebAssembly em `package.json`:
+
+```jsonc
+"overrides": { "rollup": "npm:@rollup/wasm-node@4.62.2" }
+```
+
+Se atualizar o Vite/Rollup, ajuste a versão do override para casar com a nova do `rollup`. Para
+voltar à build nativa (mais rápida), remova o override e adicione uma exclusão da pasta do projeto
+no Defender (`Add-MpPreference -ExclusionPath <pasta>` em PowerShell admin), depois `npm install`.
