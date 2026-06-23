@@ -24,6 +24,33 @@ const clientEnvSchema = z.object({
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 export type AdapterMode = ClientEnv['VITE_ADAPTER_MODE'];
 
+/**
+ * Trava de segurança (8.1): impede que uma chave `service_role`/`supabase_admin`
+ * — que ignora o RLS — seja usada no cliente (VITE_*, embutida no bundle).
+ * Decodifica o payload do JWT da chave e recusa o boot se o papel for elevado.
+ */
+function assertChaveNaoPrivilegiada(key: string | undefined): void {
+  if (!key) return;
+  const parts = key.split('.');
+  if (parts.length !== 3) return; // não parece JWT — deixa o Zod/Supabase tratar
+  let role: unknown;
+  try {
+    const b64 = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
+    role = (JSON.parse(atob(b64)) as { role?: unknown }).role;
+  } catch {
+    return; // não conseguimos decodificar — não bloqueia
+  }
+  if (role === 'service_role' || role === 'supabase_admin') {
+    throw new Error(
+      'PERIGO DE SEGURANÇA: VITE_SUPABASE_ANON_KEY contém uma chave "' +
+        String(role) +
+        '", que IGNORA o RLS e jamais pode ir para o cliente. ' +
+        'Use a chave "anon public" do projeto (Supabase → Project Settings → API → Project API keys → anon public) ' +
+        'e rotacione a service_role exposta.',
+    );
+  }
+}
+
 function loadEnv(): ClientEnv {
   const parsed = clientEnvSchema.safeParse(import.meta.env);
   if (!parsed.success) {
@@ -35,6 +62,7 @@ function loadEnv(): ClientEnv {
       `Configuração de ambiente inválida. Cheque seu .env (veja .env.example):\n${issues}`,
     );
   }
+  assertChaveNaoPrivilegiada(parsed.data.VITE_SUPABASE_ANON_KEY);
   return parsed.data;
 }
 

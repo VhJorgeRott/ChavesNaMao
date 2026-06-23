@@ -21,6 +21,7 @@ import type {
   Empreendimento,
   Entrega,
   ItemEntrega,
+  ModeloTermo,
   Unidade,
   AuditEntry,
 } from '@/domain/types';
@@ -36,7 +37,25 @@ export interface DbState {
   tokens: AccessTokenRec[];
   auditoria: AuditEntry[];
   usuarios: AppUser[];
+  modelos: ModeloTermo[];
 }
+
+const MODELO_PADRAO = `TERMO DE ENTREGA DE CHAVES
+
+Contrato nº {{financeiro.contrato}}
+
+Pelo presente instrumento, a Rottas Construtora e Incorporadora entrega ao(à) cliente {{cliente.nome}}, inscrito(a) no CPF {{cliente.cpf}}, as chaves da unidade {{unidade.identificacao}}, do empreendimento {{empreendimento.nome}}, em {{empreendimento.cidade}}/{{empreendimento.uf}}, com área de {{unidade.area}}.
+
+Valor do contrato: {{financeiro.valorContrato}}.
+Saldo devedor em aberto: {{financeiro.saldoDevedor}} ({{financeiro.parcelasEmAberto}} parcela(s) restantes).
+
+O(A) cliente declara receber a unidade em perfeitas condições, dando plena quitação ao objeto deste termo.
+
+{{empreendimento.cidade}}, {{data.hoje}}.
+
+
+_______________________________
+{{cliente.nome}}`;
 
 const HASH_PLACEHOLDER = 'a'.repeat(64);
 
@@ -208,5 +227,14 @@ export function createInitialState(): DbState {
     tokens,
     auditoria,
     usuarios: [USUARIO_ADMIN, USUARIO_EQUIPE],
+    modelos: [
+      {
+        id: 'mod-0001',
+        nome: 'Termo de Entrega de Chaves (padrão)',
+        conteudo: MODELO_PADRAO,
+        createdAt: '2026-06-01T12:00:00Z',
+        updatedAt: '2026-06-01T12:00:00Z',
+      },
+    ],
   };
 }

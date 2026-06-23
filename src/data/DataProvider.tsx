@@ -38,6 +38,9 @@ export interface DataActions {
     geo: { lat: number; lng: number } | null,
   ): Promise<PortalResultado>;
   definirPapel(userId: string, papel: 'admin' | 'equipe_entrega', actorId: string): void;
+  criarModelo(nome: string, conteudo: string, actorId: string): string;
+  atualizarModelo(id: string, dados: { nome: string; conteudo: string }, actorId: string): void;
+  removerModelo(id: string, actorId: string): void;
 }
 
 interface DataContextValue {
@@ -311,6 +314,41 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     [pushAudit],
   );
 
+  const criarModelo = useCallback(
+    (nome: string, conteudo: string, actorId: string): string => {
+      const id = nextId('mod');
+      const agora = new Date().toISOString();
+      setState((s) => ({
+        ...s,
+        modelos: [...s.modelos, { id, nome, conteudo, createdAt: agora, updatedAt: agora }],
+      }));
+      pushAudit(actorId, 'MODELO_CRIADO', 'modelo', id, { nome });
+      return id;
+    },
+    [pushAudit],
+  );
+
+  const atualizarModelo = useCallback(
+    (id: string, dados: { nome: string; conteudo: string }, actorId: string): void => {
+      setState((s) => ({
+        ...s,
+        modelos: s.modelos.map((m) =>
+          m.id === id ? { ...m, ...dados, updatedAt: new Date().toISOString() } : m,
+        ),
+      }));
+      pushAudit(actorId, 'MODELO_ATUALIZADO', 'modelo', id, {});
+    },
+    [pushAudit],
+  );
+
+  const removerModelo = useCallback(
+    (id: string, actorId: string): void => {
+      setState((s) => ({ ...s, modelos: s.modelos.filter((m) => m.id !== id) }));
+      pushAudit(actorId, 'MODELO_REMOVIDO', 'modelo', id, {});
+    },
+    [pushAudit],
+  );
+
   const actions = useMemo<DataActions>(
     () => ({
       iniciarEntrega,
@@ -322,6 +360,9 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       resolverToken,
       registrarAssinaturaPorToken,
       definirPapel,
+      criarModelo,
+      atualizarModelo,
+      removerModelo,
     }),
     [
       iniciarEntrega,
@@ -333,6 +374,9 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       resolverToken,
       registrarAssinaturaPorToken,
       definirPapel,
+      criarModelo,
+      atualizarModelo,
+      removerModelo,
     ],
   );
 

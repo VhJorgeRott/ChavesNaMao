@@ -22,6 +22,8 @@ export interface CrmAdapter {
 // ---------------------------------------------------------------------------
 export interface SituacaoFinanceira {
   unidadeId: string;
+  /** ID/nº do contrato como registrado no ERP (Mega). */
+  numeroContrato: string;
   quitada: boolean;
   valorContrato: number;
   saldoDevedor: number;

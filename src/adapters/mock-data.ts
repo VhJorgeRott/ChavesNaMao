@@ -121,6 +121,7 @@ export const unidadeCliente: Record<string, string> = {
 export const situacaoFinanceira: Record<string, SituacaoFinanceira> = {
   'uni-0001': {
     unidadeId: 'uni-0001',
+    numeroContrato: 'CT-2024-1042',
     quitada: false,
     valorContrato: 320000,
     saldoDevedor: 48000,
@@ -129,14 +130,25 @@ export const situacaoFinanceira: Record<string, SituacaoFinanceira> = {
   },
   'uni-0002': {
     unidadeId: 'uni-0002',
+    numeroContrato: 'CT-2024-1043',
     quitada: true,
     valorContrato: 285000,
     saldoDevedor: 0,
     parcelasEmAberto: 0,
     moeda: 'BRL',
   },
+  'uni-0003': {
+    unidadeId: 'uni-0003',
+    numeroContrato: 'CT-2024-1051',
+    quitada: false,
+    valorContrato: 398000,
+    saldoDevedor: 215000,
+    parcelasEmAberto: 24,
+    moeda: 'BRL',
+  },
   'uni-0005': {
     unidadeId: 'uni-0005',
+    numeroContrato: 'CT-2024-1067',
     quitada: false,
     valorContrato: 510000,
     saldoDevedor: 102000,

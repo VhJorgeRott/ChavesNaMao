@@ -18,6 +18,13 @@ export type UnidadeStatus = (typeof UNIDADE_STATUS)[number];
 /** Estados em que uma entrega pode ser iniciada (regra de negócio). */
 export const UNIDADE_STATUS_LIBERADO_PARA_ENTREGA: readonly UnidadeStatus[] = ['LIBERADA', 'QUITADA'];
 
+/** Status relevantes para a operação de entrega (exibidos nas telas). */
+export const UNIDADE_STATUS_VISIVEIS: readonly UnidadeStatus[] = [
+  'EM_OBRAS',
+  'LIBERADA',
+  'ENTREGUE',
+];
+
 export const ENTREGA_STATUS = [
   'ABERTURA',
   'INTEGRACAO',
@@ -129,4 +136,13 @@ export interface AppUser {
   email: string;
   papel: Papel;
   ultimaAtividade: string | null;
+}
+
+export interface ModeloTermo {
+  id: string;
+  nome: string;
+  /** Texto do termo com variáveis no formato {{grupo.campo}}. */
+  conteudo: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -13,6 +13,11 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    // @supabase/supabase-js (auth + postgrest + realtime + storage) é o maior
+    // peso do bundle. Elevamos o limite do aviso para não sinalizá-lo.
+    chunkSizeWarningLimit: 700,
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.ts'],

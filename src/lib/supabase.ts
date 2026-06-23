@@ -27,8 +27,16 @@ export function getSupabase(): SupabaseClient {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // false: trocamos o ?code por sessão explicitamente em /auth/callback
+      // (exchangeCodeForSession), para controlar o timing e expor erros — em vez
+      // do auto-processamento, que corria com o guard de rota.
+      detectSessionInUrl: false,
+      flowType: 'pkce',
     },
   });
+  // Apenas em desenvolvimento: handle para diagnóstico no console do navegador.
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__supabase = client;
+  }
   return client;
 }
