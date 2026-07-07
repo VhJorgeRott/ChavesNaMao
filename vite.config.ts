@@ -12,6 +12,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Falha explicitamente se a 5173 estiver ocupada, em vez de pular para
+    // outra porta — assim o redirect_uri do OAuth nunca fica inconsistente.
+    strictPort: true,
   },
   build: {
     // @supabase/supabase-js (auth + postgrest + realtime + storage) é o maior

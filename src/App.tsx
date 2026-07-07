@@ -17,7 +17,11 @@ import { EntregaDetalhe } from '@/pages/EntregaDetalhe';
 import { Modelos } from '@/pages/Modelos';
 import { ModeloEditor } from '@/pages/ModeloEditor';
 import { Admin } from '@/pages/Admin';
+import { Atividade } from '@/pages/Atividade';
 import { Portal } from '@/pages/Portal';
+import { Perfil } from '@/pages/Perfil';
+import { TermosDeUso } from '@/pages/TermosDeUso';
+import { PoliticaDePrivacidade } from '@/pages/PoliticaDePrivacidade';
 import { NotFound } from '@/pages/NotFound';
 
 // Lazy: a Início carrega Recharts — mantém-no fora do bundle do login/portal.
@@ -42,6 +46,8 @@ function App(): React.JSX.Element {
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/portal/:token" element={<Portal />} />
+              <Route path="/termos-de-uso" element={<TermosDeUso />} />
+              <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
 
               {/* App interno — exige autenticação. */}
               <Route
@@ -67,11 +73,20 @@ function App(): React.JSX.Element {
                 <Route path="/modelos" element={<Modelos />} />
                 <Route path="/modelos/novo" element={<ModeloEditor />} />
                 <Route path="/modelos/:id" element={<ModeloEditor />} />
+                <Route path="/perfil" element={<Perfil />} />
                 <Route
                   path="/admin"
                   element={
                     <RequireAdmin>
                       <Admin />
+                    </RequireAdmin>
+                  }
+                />
+                <Route
+                  path="/atividade"
+                  element={
+                    <RequireAdmin>
+                      <Atividade />
                     </RequireAdmin>
                   }
                 />

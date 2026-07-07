@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Building2, KeyRound, Loader2 } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Building2,
+  ChevronsUpDown,
+  KeyRound,
+  Loader2,
+  Tag,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { adapters } from '@/adapters';
 import { useData } from '@/data/DataProvider';
@@ -14,10 +25,12 @@ import {
 import { UNIDADE_STATUS_META } from '@/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
-import { UnidadeStatusBadge } from '@/components/shared/StatusBadge';
+import { InadimplenciaBadge, UnidadeStatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -26,8 +39,45 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { fArea } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 const TODOS = '__todos__';
+const INADIMPLENTE = 'inadimplente';
+const EM_DIA = 'emdia';
+
+/** Colunas ordenáveis da tabela de unidades. */
+type CampoOrdem = 'contrato' | 'cliente' | 'unidade' | 'area' | 'status' | 'inadimplente';
+type Ordenacao = { campo: CampoOrdem | null; dir: 'asc' | 'desc' };
+
+/**
+ * Comparador genérico para a ordenação da tabela. Strings usam `localeCompare`
+ * pt-BR com `numeric` (para "MÓDULO 1 · 5" ordenar naturalmente); números por
+ * subtração; nullish/undefined sempre por último, independente da direção.
+ */
+function compararValores(
+  a: string | number | boolean | null | undefined,
+  b: string | number | boolean | null | undefined,
+  dir: 'asc' | 'desc',
+): number {
+  const aVazio = a === null || a === undefined || a === '';
+  const bVazio = b === null || b === undefined || b === '';
+  if (aVazio && bVazio) return 0;
+  if (aVazio) return 1;
+  if (bVazio) return -1;
+
+  let cmp: number;
+  if (typeof a === 'number' && typeof b === 'number') {
+    cmp = a - b;
+  } else if (typeof a === 'boolean' && typeof b === 'boolean') {
+    cmp = Number(a) - Number(b);
+  } else {
+    cmp = String(a).localeCompare(String(b), 'pt-BR', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  }
+  return dir === 'asc' ? cmp : -cmp;
+}
 
 export function EmpreendimentoUnidades(): React.JSX.Element {
   const { empreendimentoId = '' } = useParams();
@@ -39,9 +89,11 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const [carregandoEmp, setCarregandoEmp] = useState(true);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<string>(TODOS);
+  const [inadimplenciaFiltro, setInadimplenciaFiltro] = useState<string>(TODOS);
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>({ campo: 'cliente', dir: 'asc' });
   const [iniciando, setIniciando] = useState<string | null>(null);
   const [infoIntegracao, setInfoIntegracao] = useState<
-    Record<string, { cliente?: string; contrato?: string }>
+    Record<string, { cliente?: string; contrato?: string; inadimplente?: boolean }>
   >({});
   const [carregandoInfo, setCarregandoInfo] = useState(true);
 
@@ -68,25 +120,44 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     };
   }, [empreendimentoId, navigate]);
 
-  // Carrega as unidades do empreendimento no CRM (mapa de disponibilidade) e as
+  // Carrega as unidades do empreendimento no ERP (Mega, cruzando pelo nome) e as
   // sincroniza no estado local, preservando o ciclo de entrega controlado no app.
+  // O mesmo payload já traz contrato/cliente por unidade — sem chamadas extras.
   useEffect(() => {
     let ativo = true;
-    if (!empreendimentoId) return;
-    void adapters.crm
-      .getUnidadesByEmpreendimento(empreendimentoId)
+    if (!empreendimento) return;
+    setCarregandoInfo(true);
+    void adapters.erp
+      .getUnidadesByEmpreendimento(empreendimento.id, empreendimento.nome)
       .then((lista) => {
-        if (ativo) actions.sincronizarUnidades(empreendimentoId, lista);
+        if (!ativo) return;
+        actions.sincronizarUnidades(empreendimento.id, lista);
+        setInfoIntegracao(
+          Object.fromEntries(
+            lista.map((u) => {
+              const info: { cliente?: string; contrato?: string; inadimplente?: boolean } = {};
+              if (u.clienteNome) info.cliente = u.clienteNome;
+              if (u.contratoNumero) info.contrato = u.contratoNumero;
+              if (u.inadimplente !== undefined) info.inadimplente = u.inadimplente;
+              return [u.id, info] as const;
+            }),
+          ),
+        );
+        setCarregandoInfo(false);
+        if (lista.length === 0) {
+          toast.warning('Nenhuma unidade encontrada no Mega para este empreendimento');
+        }
       })
       .catch((e) => {
         if (ativo) {
-          toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do CRM');
+          setCarregandoInfo(false);
+          toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do ERP (Mega)');
         }
       });
     return () => {
       ativo = false;
     };
-  }, [empreendimentoId, actions]);
+  }, [empreendimento, actions]);
 
   // Unidades do empreendimento, apenas com status visíveis.
   const unidades = useMemo(
@@ -99,48 +170,65 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     [state, empreendimentoId],
   );
 
-  useEffect(() => {
-    let ativo = true;
-    setCarregandoInfo(true);
-    void (async () => {
-      const entradas = await Promise.all(
-        unidades.map(async ({ unidade }) => {
-          const info: { cliente?: string; contrato?: string } = {};
-          try {
-            info.cliente = (await adapters.crm.getClienteByUnidade(unidade.id)).nome;
-          } catch {
-            /* sem cliente no CRM */
-          }
-          try {
-            info.contrato = (await adapters.erp.getSituacaoFinanceira(unidade.id)).numeroContrato;
-          } catch {
-            /* sem contrato no ERP */
-          }
-          return [unidade.id, info] as const;
-        }),
-      );
-      if (!ativo) return;
-      setInfoIntegracao(Object.fromEntries(entradas));
-      setCarregandoInfo(false);
-    })();
-    return () => {
-      ativo = false;
-    };
-  }, [unidades]);
-
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return unidades.filter(({ unidade }) => {
       if (statusFiltro !== TODOS && unidade.status !== statusFiltro) return false;
-      if (!q) return true;
       const info = infoIntegracao[unidade.id];
+      if (inadimplenciaFiltro === INADIMPLENTE && info?.inadimplente !== true) return false;
+      if (inadimplenciaFiltro === EM_DIA && info?.inadimplente !== false) return false;
+      if (!q) return true;
       return (
         unidade.identificacao.toLowerCase().includes(q) ||
         (info?.cliente?.toLowerCase().includes(q) ?? false) ||
         (info?.contrato?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [unidades, busca, statusFiltro, infoIntegracao]);
+  }, [unidades, busca, statusFiltro, inadimplenciaFiltro, infoIntegracao]);
+
+  // Ordenação aplicada depois do filtro, sem recomputar `filtradas`.
+  const ordenadas = useMemo(() => {
+    if (!ordenacao.campo) return filtradas;
+    const campo = ordenacao.campo;
+    const valor = ({ unidade }: UnidadeResumo): string | number | boolean | null | undefined => {
+      const info = infoIntegracao[unidade.id];
+      switch (campo) {
+        case 'contrato':
+          return info?.contrato;
+        case 'cliente':
+          return info?.cliente;
+        case 'unidade':
+          return unidade.identificacao;
+        case 'area':
+          return unidade.areaM2;
+        case 'status':
+          return UNIDADE_STATUS_META[unidade.status].label;
+        case 'inadimplente':
+          return info?.inadimplente;
+      }
+    };
+    return [...filtradas].sort((a, b) => compararValores(valor(a), valor(b), ordenacao.dir));
+  }, [filtradas, ordenacao, infoIntegracao]);
+
+  function alternarOrdem(campo: CampoOrdem) {
+    setOrdenacao((atual) =>
+      atual.campo === campo
+        ? { campo, dir: atual.dir === 'asc' ? 'desc' : 'asc' }
+        : { campo, dir: 'asc' },
+    );
+  }
+
+  // Indicadores do empreendimento (totais, independentes dos filtros da tabela).
+  const metricas = useMemo(
+    () => ({
+      total: unidades.length,
+      vendidas: unidades.filter((r) => r.unidade.status === 'VENDIDA').length,
+      inadimplentes: unidades.filter((r) => infoIntegracao[r.unidade.id]?.inadimplente === true)
+        .length,
+      entregasIniciadas: unidades.filter((r) => r.entregaAtiva).length,
+    }),
+    [unidades, infoIntegracao],
+  );
 
   async function iniciar(resumo: UnidadeResumo) {
     setIniciando(resumo.unidade.id);
@@ -186,7 +274,10 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                 {empreendimento.nome}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {empreendimento.cidade}/{empreendimento.uf} · {unidades.length} unidade(s)
+                {empreendimento.cidade}/{empreendimento.uf} ·{' '}
+                {carregandoInfo && unidades.length === 0
+                  ? 'Carregando...'
+                  : `${unidades.length} unidade(s)`}
               </p>
             </div>
           </div>
@@ -194,6 +285,38 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
       </header>
 
       <PageContent>
+        <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
+            icon={Building2}
+            accent="hsl(var(--primary))"
+            label="Unidades"
+            value={metricas.total}
+            tooltip="Total de unidades vendidas deste empreendimento."
+          />
+          <KpiCard
+            icon={Tag}
+            accent="#8b5cf6"
+            label="Vendidas"
+            value={metricas.vendidas}
+            tooltip="Unidades com status Vendida."
+          />
+          <KpiCard
+            icon={TriangleAlert}
+            accent="#ef4444"
+            label="Inadimplentes"
+            value={metricas.inadimplentes}
+            carregando={carregandoInfo}
+            tooltip="Unidades cujo contrato está inadimplente no Mega."
+          />
+          <KpiCard
+            icon={KeyRound}
+            accent="#f29f05"
+            label="Entregas iniciadas"
+            value={metricas.entregasIniciadas}
+            tooltip="Unidades com uma entrega já em andamento."
+          />
+        </div>
+
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
           <div className="md:max-w-sm md:flex-1">
             <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por unidade, cliente, contrato..." />
@@ -211,23 +334,34 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
               ))}
             </SelectContent>
           </Select>
+          <Select value={inadimplenciaFiltro} onValueChange={setInadimplenciaFiltro}>
+            <SelectTrigger className="md:w-48">
+              <SelectValue placeholder="Inadimplência" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todas as situações</SelectItem>
+              <SelectItem value={INADIMPLENTE}>Inadimplente</SelectItem>
+              <SelectItem value={EM_DIA}>Em dia</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead className="bg-muted text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Contrato</th>
-                  <th className="px-4 py-3 text-left font-medium">Cliente</th>
-                  <th className="px-4 py-3 text-left font-medium">Unidade</th>
-                  <th className="px-4 py-3 text-left font-medium max-md:hidden">Área</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
+                  <ThOrdenavel campo="contrato" label="Contrato" ordenacao={ordenacao} onSort={alternarOrdem} />
+                  <ThOrdenavel campo="cliente" label="Cliente" ordenacao={ordenacao} onSort={alternarOrdem} />
+                  <ThOrdenavel campo="unidade" label="Unidade" ordenacao={ordenacao} onSort={alternarOrdem} />
+                  <ThOrdenavel campo="area" label="Área" ordenacao={ordenacao} onSort={alternarOrdem} className="max-md:hidden" />
+                  <ThOrdenavel campo="status" label="Status" ordenacao={ordenacao} onSort={alternarOrdem} />
+                  <ThOrdenavel campo="inadimplente" label="Inadimplência" ordenacao={ordenacao} onSort={alternarOrdem} />
                   <th className="px-4 py-3 text-right font-medium">Ação</th>
                 </tr>
               </thead>
               <tbody>
-                {filtradas.map((resumo) => {
+                {ordenadas.map((resumo) => {
                   const { unidade, entregaAtiva } = resumo;
                   const liberada = UNIDADE_STATUS_LIBERADO_PARA_ENTREGA.includes(unidade.status);
                   return (
@@ -260,6 +394,17 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                       <td className="px-4 py-3">
                         <UnidadeStatusBadge status={unidade.status} />
                       </td>
+                      <td className="px-4 py-3">
+                        {carregandoInfo ? (
+                          <Skeleton className="h-4 w-24" />
+                        ) : infoIntegracao[unidade.id]?.inadimplente !== undefined ? (
+                          <InadimplenciaBadge
+                            inadimplente={infoIntegracao[unidade.id]?.inadimplente ?? false}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {entregaAtiva ? (
                           <Button
@@ -287,15 +432,99 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             </table>
           </div>
 
-          {filtradas.length === 0 && (
-            <EmptyState
-              icon={Building2}
-              titulo="Nenhuma unidade encontrada"
-              descricao="Ajuste a busca ou o filtro de status."
-            />
-          )}
+          {filtradas.length === 0 &&
+            (carregandoInfo ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                Buscando unidades no Mega...
+              </div>
+            ) : (
+              <EmptyState
+                icon={Building2}
+                titulo="Nenhuma unidade encontrada"
+                descricao="Ajuste a busca ou o filtro de status."
+              />
+            ))}
         </div>
       </PageContent>
     </>
+  );
+}
+
+/** Card de indicador (KPI) com tooltip explicativo no hover — padrão do design system. */
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  tooltip,
+  accent,
+  carregando = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  tooltip: string;
+  accent: string;
+  carregando?: boolean;
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Card className="cursor-default rounded-xl text-left">
+          <CardContent className="flex flex-col gap-3 p-5">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Icon className="h-5 w-5 shrink-0" style={{ color: accent }} />
+              <h3 className="text-sm font-semibold">{label}</h3>
+            </div>
+            {carregando ? (
+              <Skeleton className="h-9 w-12" />
+            ) : (
+              <span className="text-3xl font-bold tabular-nums text-foreground">{value}</span>
+            )}
+          </CardContent>
+        </Card>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Cabeçalho de coluna clicável que ordena a tabela pelo `campo` indicado. */
+function ThOrdenavel({
+  campo,
+  label,
+  ordenacao,
+  onSort,
+  className,
+}: {
+  campo: CampoOrdem;
+  label: string;
+  ordenacao: Ordenacao;
+  onSort: (campo: CampoOrdem) => void;
+  className?: string;
+}): React.JSX.Element {
+  const ativo = ordenacao.campo === campo;
+  return (
+    <th className={cn('px-4 py-3 text-left font-medium', className)}>
+      <button
+        type="button"
+        onClick={() => onSort(campo)}
+        className={cn(
+          'group inline-flex items-center gap-1 font-medium hover:text-foreground',
+          ativo && 'text-foreground',
+        )}
+      >
+        {label}
+        {ativo ? (
+          ordenacao.dir === 'asc' ? (
+            <ArrowUp className="h-3.5 w-3.5" />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5" />
+          )
+        ) : (
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-40 group-hover:opacity-100" />
+        )}
+      </button>
+    </th>
   );
 }

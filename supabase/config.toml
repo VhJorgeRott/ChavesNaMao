@@ -1,0 +1,9 @@
+project_id = "nosxksihfuiynuzktzjz"
+
+# O gateway do Supabase valida o JWT antes de invocar a função; a identidade do
+# usuário ainda é resolvida do próprio token dentro da função (nunca do body).
+[functions.delete-account]
+verify_jwt = true
+
+[functions.mega-unidades]
+verify_jwt = true

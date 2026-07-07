@@ -16,6 +16,8 @@ import { MockClicksignAdapter } from './signature/mock';
 import { LiveClicksignAdapter } from './signature/live';
 import { MockNotificationAdapter } from './notification/mock';
 import { LiveNotificationAdapter } from './notification/live';
+import { MockAdminAdapter } from './admin/mock';
+import { LiveAdminAdapter } from './admin/live';
 
 const makeCrm = (m: AdapterMode) => (m === 'live' ? new LiveCrmAdapter() : new MockCrmAdapter());
 const makeErp = (m: AdapterMode) => (m === 'live' ? new LiveErpAdapter() : new MockErpAdapter());
@@ -23,6 +25,8 @@ const makeSignature = (m: AdapterMode) =>
   m === 'live' ? new LiveClicksignAdapter() : new MockClicksignAdapter();
 const makeNotification = (m: AdapterMode) =>
   m === 'live' ? new LiveNotificationAdapter() : new MockNotificationAdapter();
+const makeAdmin = (m: AdapterMode) =>
+  m === 'live' ? new LiveAdminAdapter() : new MockAdminAdapter();
 
 /** Constrói o conjunto de adapters com um único modo (usado nos testes). */
 export function createAdapters(mode: AdapterMode): Adapters {
@@ -31,6 +35,7 @@ export function createAdapters(mode: AdapterMode): Adapters {
     erp: makeErp(mode),
     signature: makeSignature(mode),
     notification: makeNotification(mode),
+    admin: makeAdmin(mode),
   };
 }
 
@@ -40,6 +45,7 @@ export const adapters: Adapters = {
   erp: makeErp(env.VITE_ERP_MODE ?? env.VITE_ADAPTER_MODE),
   signature: makeSignature(env.VITE_SIGNATURE_MODE ?? env.VITE_ADAPTER_MODE),
   notification: makeNotification(env.VITE_NOTIFICATION_MODE ?? env.VITE_ADAPTER_MODE),
+  admin: makeAdmin(env.VITE_ADMIN_MODE ?? env.VITE_ADAPTER_MODE),
 };
 
 export * from './types';

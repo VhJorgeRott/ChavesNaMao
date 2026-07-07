@@ -49,3 +49,21 @@ export function UnidadeStatusBadge({
   const meta = UNIDADE_STATUS_META[status];
   return <Pill label={meta.label} color={meta.color} className={className} />;
 }
+
+/**
+ * Selo de inadimplência do cliente (classificação do Mega). Vermelho quando
+ * inadimplente; "Em dia" (verde-azulado) caso contrário — sem detalhar parcelas.
+ */
+export function InadimplenciaBadge({
+  inadimplente,
+  className,
+}: {
+  inadimplente: boolean;
+  className?: string;
+}): React.JSX.Element {
+  return inadimplente ? (
+    <Pill label="Inadimplente" color="#ef4444" className={className} />
+  ) : (
+    <Pill label="Em dia" color="#14b8a6" className={className} />
+  );
+}

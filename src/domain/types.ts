@@ -21,6 +21,7 @@ export const UNIDADE_STATUS_LIBERADO_PARA_ENTREGA: readonly UnidadeStatus[] = ['
 /** Status relevantes para a operação de entrega (exibidos nas telas). */
 export const UNIDADE_STATUS_VISIVEIS: readonly UnidadeStatus[] = [
   'EM_OBRAS',
+  'VENDIDA',
   'LIBERADA',
   'ENTREGUE',
 ];
@@ -60,7 +61,14 @@ export interface Unidade {
   empreendimentoId: string;
   identificacao: string;
   status: UnidadeStatus;
-  areaM2: number;
+  /** Área privativa em m². `null` quando a integração de origem não informa (ex.: Mega). */
+  areaM2: number | null;
+  /**
+   * Cliente inadimplente no contrato vigente (classificação do Mega). Três
+   * estados: `true`/`false` quando o ERP (Mega) informa; `undefined` quando a
+   * origem não conhece (seed/mock/CRM) — nesse caso o selo não é exibido.
+   */
+  inadimplente?: boolean | undefined;
   createdAt: string;
 }
 
@@ -140,6 +148,10 @@ export interface AppUser {
   email: string;
   papel: Papel;
   ultimaAtividade: string | null;
+  /** Foto do usuário (user_metadata do Entra); null → fallback de iniciais. */
+  avatarUrl: string | null;
+  /** Data de cadastro (auth.users.created_at). */
+  criadoEm: string | null;
 }
 
 export interface ModeloTermo {

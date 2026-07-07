@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import type { AppUser, Papel } from '@/domain/types';
 
@@ -61,8 +61,10 @@ export async function getCurrentSession(): Promise<Session | null> {
 }
 
 /** Assina mudanças de sessão (login/logout/refresh). Retorna o unsubscribe. */
-export function onAuthChange(cb: (session: Session | null) => void): { unsubscribe: () => void } {
-  const { data } = getSupabase().auth.onAuthStateChange((_event, session) => cb(session));
+export function onAuthChange(
+  cb: (event: AuthChangeEvent, session: Session | null) => void,
+): { unsubscribe: () => void } {
+  const { data } = getSupabase().auth.onAuthStateChange((event, session) => cb(event, session));
   return data.subscription;
 }
 
@@ -85,12 +87,31 @@ export async function loadUserFromSession(session: Session): Promise<AppUser> {
     console.warn('[auth] erro ao consultar user_roles:', e);
   }
 
-  const meta = (user.user_metadata ?? {}) as { name?: unknown; full_name?: unknown };
+  const meta = (user.user_metadata ?? {}) as {
+    name?: unknown;
+    full_name?: unknown;
+    avatar_url?: unknown;
+    picture?: unknown;
+  };
   const nome =
     (typeof meta.name === 'string' && meta.name) ||
     (typeof meta.full_name === 'string' && meta.full_name) ||
     user.email ||
     'Usuário';
+  // O Entra geralmente não envia foto no OIDC (a do Graph exige outro token) —
+  // o fallback de iniciais é o caminho comum.
+  const avatarUrl =
+    (typeof meta.avatar_url === 'string' && meta.avatar_url) ||
+    (typeof meta.picture === 'string' && meta.picture) ||
+    null;
 
-  return { id: user.id, nome, email: user.email ?? '', papel, ultimaAtividade: null };
+  return {
+    id: user.id,
+    nome,
+    email: user.email ?? '',
+    papel,
+    ultimaAtividade: null,
+    avatarUrl,
+    criadoEm: user.created_at ?? null,
+  };
 }

@@ -16,6 +16,7 @@ import {
 } from '@/domain/types';
 import { buildPortalUrl, generateToken, hashToken, timingSafeEqualHex } from '@/lib/token';
 import { env } from '@/lib/env';
+import { logAtividade } from '@/lib/atividade';
 import { createInitialState, type DbState } from './seed';
 
 let idCounter = 1000;
@@ -86,6 +87,9 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
           },
         ],
       }));
+      // Persiste no audit_log (Supabase) além da trilha em memória. No-op em
+      // dev/mock. O actor persistido é sempre a sessão atual (RLS insert-self).
+      void logAtividade({ action, entity, entityId, metadata });
     },
     [],
   );

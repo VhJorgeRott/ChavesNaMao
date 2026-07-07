@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useData } from '@/data/DataProvider';
 import type { AppUser } from '@/domain/types';
+import { logAtividade } from '@/lib/atividade';
 import { isAuthConfigured } from './authConfig';
 import {
   getCurrentSession,
@@ -72,7 +73,12 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
     void getCurrentSession()
       .then(aplicarSessao)
       .catch(() => ativo && setEntraStatus('unauthenticated'));
-    const sub = onAuthChange((session) => void aplicarSessao(session));
+    const sub = onAuthChange((event, session) => {
+      // Registra o login uma vez, quando a sessão é efetivamente estabelecida
+      // (SIGNED_IN não dispara em refresh de token — evita duplicar).
+      if (event === 'SIGNED_IN') void logAtividade({ action: 'auth.login', entity: 'auth' });
+      void aplicarSessao(session);
+    });
 
     return () => {
       ativo = false;
@@ -104,7 +110,12 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         void loginAzure().catch((e) =>
           setEntraError(e instanceof Error ? e.message : 'Falha ao iniciar o login'),
         ),
-      logout: () => void logoutAzure(),
+      // Registra o logout enquanto a sessão ainda existe (o insert exige auth.uid).
+      logout: () => {
+        void logAtividade({ action: 'auth.logout', entity: 'auth' }).finally(() =>
+          void logoutAzure(),
+        );
+      },
       setDevUserId: () => {
         /* sem efeito no modo entra */
       },

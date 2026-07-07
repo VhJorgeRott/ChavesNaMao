@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
 import type { CrmAdapter } from '../types';
 import { AdapterError, AdapterNotImplementedError } from '../errors';
+import { unidadeSchema } from '../schemas';
 import { getSupabase } from '@/lib/supabase';
 
 /**
@@ -23,23 +24,6 @@ const empreendimentoSchema = z.object({
   situacaoObra: z.string().nullable().default(null),
 });
 
-const unidadeStatusSchema = z.enum([
-  'EM_OBRAS',
-  'DISPONIVEL',
-  'VENDIDA',
-  'QUITADA',
-  'LIBERADA',
-  'ENTREGUE',
-]);
-
-const unidadeSchema = z.object({
-  id: z.string(),
-  empreendimentoId: z.string(),
-  identificacao: z.string(),
-  status: unidadeStatusSchema,
-  areaM2: z.number(),
-  createdAt: z.string(),
-});
 
 export class LiveCrmAdapter implements CrmAdapter {
   async getEmpreendimentos(): Promise<Empreendimento[]> {

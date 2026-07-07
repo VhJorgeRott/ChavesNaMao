@@ -65,6 +65,8 @@ export const USUARIO_ADMIN: AppUser = {
   email: 'vitor.jorge@rottas.com.br',
   papel: 'admin',
   ultimaAtividade: '2026-06-22T13:00:00Z',
+  avatarUrl: null,
+  criadoEm: '2025-11-10T09:00:00Z',
 };
 
 const USUARIO_EQUIPE: AppUser = {
@@ -73,6 +75,8 @@ const USUARIO_EQUIPE: AppUser = {
   email: 'joao.silva@rottas.com.br',
   papel: 'equipe_entrega',
   ultimaAtividade: '2026-06-21T18:20:00Z',
+  avatarUrl: null,
+  criadoEm: '2026-01-15T14:30:00Z',
 };
 
 export function createInitialState(): DbState {

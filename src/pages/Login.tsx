@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { KeyRound, LogIn } from 'lucide-react';
 import { useAuth } from '@/auth/SessionProvider';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 
 /** Microsoft logo (4 quadrados) — SVG inline, marca oficial. */
 function MicrosoftLogo(): React.JSX.Element {
@@ -19,6 +20,7 @@ function MicrosoftLogo(): React.JSX.Element {
 export function Login(): React.JSX.Element {
   const { mode, status, login, error } = useAuth();
   const navigate = useNavigate();
+  const [aceitou, setAceitou] = useState(false);
 
   useEffect(() => {
     if (status === 'authenticated') navigate('/dashboard', { replace: true });
@@ -43,14 +45,44 @@ export function Login(): React.JSX.Element {
           </div>
         )}
 
+        {/* Aceite obrigatório (LGPD): habilita o login somente após concordar. */}
+        <label className="mb-4 flex cursor-pointer items-start gap-2.5">
+          <Checkbox
+            checked={aceitou}
+            onChange={(e) => setAceitou(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            Li e aceito os{' '}
+            <Link
+              to="/termos-de-uso"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Termos de Uso
+            </Link>{' '}
+            e a{' '}
+            <Link
+              to="/politica-de-privacidade"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Política de Privacidade
+            </Link>
+            .
+          </span>
+        </label>
+
         {mode === 'entra' ? (
-          <Button className="w-full" size="lg" onClick={login}>
+          <Button className="w-full" size="lg" onClick={login} disabled={!aceitou}>
             <MicrosoftLogo />
             Entrar com Microsoft
           </Button>
         ) : (
           <>
-            <Button className="w-full" size="lg" onClick={login}>
+            <Button className="w-full" size="lg" onClick={login} disabled={!aceitou}>
               <LogIn />
               Entrar (modo desenvolvimento)
             </Button>

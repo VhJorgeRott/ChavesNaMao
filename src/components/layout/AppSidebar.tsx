@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
+  Activity,
   Building2,
   FileText,
   KeyRound,
@@ -13,6 +14,7 @@ import { useAuth, useSession } from '@/auth/SessionProvider';
 import { useData } from '@/data/DataProvider';
 import { PAPEL_META } from '@/domain/status';
 import { Button } from '@/components/ui/button';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 import {
   Select,
   SelectContent,
@@ -36,7 +38,10 @@ const NAV: NavItem[] = [
   { to: '/modelos', label: 'Modelos de termo', icon: FileText },
 ];
 
-const FOOTER_NAV: NavItem[] = [{ to: '/admin', label: 'Usuários', icon: Shield, adminOnly: true }];
+const FOOTER_NAV: NavItem[] = [
+  { to: '/admin', label: 'Usuários', icon: Shield, adminOnly: true },
+  { to: '/atividade', label: 'Atividade', icon: Activity, adminOnly: true },
+];
 
 function itemClasses(isActive: boolean): string {
   return cn(
@@ -104,18 +109,27 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }): React.J
 
       {/* Rodapé: usuário + (modo dev) troca de papel + sair */}
       <div className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-            {currentUser.nome
-              .split(' ')
-              .map((n) => n[0])
-              .slice(0, 2)
-              .join('')}
-          </div>
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-sm font-medium text-foreground">{currentUser.nome}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{currentUser.email}</p>
-          </div>
+        <div className="flex items-center gap-1">
+          <NavLink
+            to="/perfil"
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1 py-1.5 transition-colors',
+                isActive ? 'bg-[#f59229]/15' : 'hover:bg-sidebar-accent',
+              )
+            }
+          >
+            <UserAvatar
+              nome={currentUser.nome}
+              avatarUrl={currentUser.avatarUrl}
+              className="h-9 w-9 text-[11px]"
+            />
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-sm font-medium text-foreground">{currentUser.nome}</p>
+              <p className="truncate text-[11px] text-muted-foreground">{currentUser.email}</p>
+            </div>
+          </NavLink>
           <Button variant="ghost" size="icon" aria-label="Sair" onClick={logout}>
             <LogOut className="text-muted-foreground" />
           </Button>

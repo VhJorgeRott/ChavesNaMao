@@ -19,7 +19,7 @@ import { getEntregaDetalhe } from '@/data/selectors';
 import { useSession } from '@/auth/SessionProvider';
 import { podeTransicionar } from '@/domain/state-machine';
 import type { EntregaStatus } from '@/domain/types';
-import { EntregaStatusBadge } from '@/components/shared/StatusBadge';
+import { EntregaStatusBadge, InadimplenciaBadge } from '@/components/shared/StatusBadge';
 import { EtapaTimeline } from '@/components/entregas/EtapaTimeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -193,6 +193,12 @@ export function EntregaDetalhe(): React.JSX.Element {
                     value={empreendimento ? `${empreendimento.cidade}/${empreendimento.uf}` : undefined}
                   />
                   <Info label="Área" value={unidade ? fArea(unidade.areaM2) : undefined} />
+                  {unidade?.inadimplente !== undefined && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Situação</span>
+                      <InadimplenciaBadge inadimplente={unidade.inadimplente} />
+                    </div>
+                  )}
                   <Info label="Responsável" value={responsavel?.nome} />
                 </CardContent>
               </Card>

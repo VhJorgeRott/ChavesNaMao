@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { KeyRound, Menu, X } from 'lucide-react';
 import { AppSidebar } from './AppSidebar';
 import { Button } from '@/components/ui/button';
+import { logAtividade } from '@/lib/atividade';
 
 /**
  * Shell autenticado: sidebar fixa no desktop, drawer no mobile, e o fundo cinza
@@ -10,6 +11,17 @@ import { Button } from '@/components/ui/button';
  */
 export function AppLayout(): React.JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  // Registra a navegação entre telas (nível de rota) para a trilha de atividade.
+  // logAtividade é no-op sem sessão/backend, então só persiste no modo autenticado.
+  useEffect(() => {
+    void logAtividade({
+      action: 'page.view',
+      entity: 'route',
+      metadata: { path: location.pathname, title: document.title },
+    });
+  }, [location.pathname]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

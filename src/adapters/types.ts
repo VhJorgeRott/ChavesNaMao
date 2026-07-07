@@ -8,7 +8,8 @@
  * usuário. Segredos (API tokens) ficam no servidor, nunca no bundle.
  */
 
-import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
+import type { AppUser, AuditEntry, Cliente, Empreendimento, Unidade } from '@/domain/types';
+import type { TipoAtividade } from '@/domain/atividade';
 
 // ---------------------------------------------------------------------------
 // CRM (CV CRM) — cadastro de empreendimentos, unidades e dados do cliente
@@ -34,8 +35,23 @@ export interface SituacaoFinanceira {
   moeda: 'BRL';
 }
 
+/** Unidade vinda do ERP com dados agregados de contrato/cliente (evita N chamadas por unidade). */
+export type UnidadeErp = Unidade & {
+  contratoNumero: string | null;
+  clienteNome: string | null;
+};
+
 export interface ErpAdapter {
   getSituacaoFinanceira(unidadeId: string): Promise<SituacaoFinanceira>;
+  /**
+   * Unidades do empreendimento no ERP (Mega, view de parcelas do Fabric).
+   * O cruzamento CV↔Mega é feito pelo NOME do empreendimento (a view não
+   * conhece o id do CV); só unidades com contrato aparecem.
+   */
+  getUnidadesByEmpreendimento(
+    empreendimentoId: string,
+    empreendimentoNome: string,
+  ): Promise<UnidadeErp[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +122,38 @@ export interface NotificationAdapter {
 }
 
 // ---------------------------------------------------------------------------
+// Admin — listagem de usuários e trilha de atividade (tela de admin)
+// ---------------------------------------------------------------------------
+export interface AtividadeFiltro {
+  /** Restringe ao ator (user id). */
+  actor?: string;
+  /** Restringe ao tipo de evento (login/navegação/ação). */
+  tipo?: TipoAtividade;
+  /** Busca (ilike) no caminho navegado (metadata.path) — casa page.view. */
+  rota?: string;
+  /** Limite inferior/superior de data (ISO). */
+  dataDe?: string;
+  dataAte?: string;
+  /** Página 0-based. */
+  pagina?: number;
+  /** Tamanho da página (padrão 20). */
+  tamanho?: number;
+}
+
+/** Uma página de atividade + se há mais registros adiante. */
+export interface AtividadePagina {
+  itens: AuditEntry[];
+  temMais: boolean;
+}
+
+export interface AdminAdapter {
+  /** Todos os usuários da plataforma (live: RPC admin_list_users; mock: seed). */
+  getUsuarios(): Promise<AppUser[]>;
+  /** Página de atividade (mais recente primeiro) conforme os filtros. */
+  getAtividade(filtro?: AtividadeFiltro): Promise<AtividadePagina>;
+}
+
+// ---------------------------------------------------------------------------
 // Conjunto completo de adapters resolvido por ambiente
 // ---------------------------------------------------------------------------
 export interface Adapters {
@@ -113,4 +161,5 @@ export interface Adapters {
   erp: ErpAdapter;
   signature: SignatureAdapter;
   notification: NotificationAdapter;
+  admin: AdminAdapter;
 }
