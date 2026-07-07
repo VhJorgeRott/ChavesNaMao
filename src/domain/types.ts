@@ -49,6 +49,10 @@ export interface Empreendimento {
   cidade: string;
   uf: string;
   createdAt: string;
+  /** Extras opcionais vindos do CRM (live): foto, disponibilidade e situação da obra. */
+  foto?: string | null;
+  unidadesDisponiveis?: number | null;
+  situacaoObra?: string | null;
 }
 
 export interface Unidade {

@@ -9,7 +9,11 @@ import {
 } from 'react';
 import { adapters } from '@/adapters';
 import { transicionar } from '@/domain/state-machine';
-import { UNIDADE_STATUS_LIBERADO_PARA_ENTREGA, type EntregaStatus } from '@/domain/types';
+import {
+  UNIDADE_STATUS_LIBERADO_PARA_ENTREGA,
+  type EntregaStatus,
+  type Unidade,
+} from '@/domain/types';
 import { buildPortalUrl, generateToken, hashToken, timingSafeEqualHex } from '@/lib/token';
 import { env } from '@/lib/env';
 import { createInitialState, type DbState } from './seed';
@@ -26,6 +30,7 @@ export type PortalResultado =
 
 export interface DataActions {
   iniciarEntrega(unidadeId: string, responsavelId: string): Promise<string>;
+  sincronizarUnidades(empreendimentoId: string, unidades: Unidade[]): void;
   avancarEtapa(entregaId: string, proximo: EntregaStatus, actorId: string): Promise<void>;
   gerarDocumento(entregaId: string, actorId: string): Promise<void>;
   gerarLinkAssinatura(entregaId: string, actorId: string): Promise<{ token: string; url: string }>;
@@ -116,6 +121,40 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       return entregaId;
     },
     [pushAudit],
+  );
+
+  // Mescla as unidades vindas do CRM (live) com o estado local. O baseline de
+  // venda (EM_OBRAS/DISPONIVEL/VENDIDA) vem do CV, mas o ciclo de ENTREGA
+  // (QUITADA/LIBERADA/ENTREGUE) é controlado no app: quando uma unidade local
+  // já avançou nesse ciclo, ou tem uma entrega em andamento, preservamos o
+  // status local em vez de sobrescrever com o do CV.
+  const sincronizarUnidades = useCallback(
+    (empreendimentoId: string, novas: Unidade[]): void => {
+      const CICLO_ENTREGA: readonly Unidade['status'][] = ['QUITADA', 'LIBERADA', 'ENTREGUE'];
+      setState((s) => {
+        const outros = s.unidades.filter((u) => u.empreendimentoId !== empreendimentoId);
+        const locais = new Map(
+          s.unidades
+            .filter((u) => u.empreendimentoId === empreendimentoId)
+            .map((u) => [u.id, u] as const),
+        );
+        const idsNovas = new Set(novas.map((n) => n.id));
+        const merged = novas.map((nova) => {
+          const local = locais.get(nova.id);
+          if (local && (CICLO_ENTREGA.includes(local.status) || local.status === 'ENTREGUE')) {
+            return { ...nova, status: local.status };
+          }
+          return nova;
+        });
+        // Preserva unidades locais deste empreendimento que têm entrega em
+        // andamento e não vieram na resposta do CV (para não sumir do fluxo).
+        const comEntrega = [...locais.values()].filter(
+          (u) => !idsNovas.has(u.id) && s.entregas.some((e) => e.unidadeId === u.id),
+        );
+        return { ...s, unidades: [...outros, ...merged, ...comEntrega] };
+      });
+    },
+    [],
   );
 
   const gerarDocumento = useCallback(
@@ -352,6 +391,7 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   const actions = useMemo<DataActions>(
     () => ({
       iniciarEntrega,
+      sincronizarUnidades,
       avancarEtapa,
       gerarDocumento,
       gerarLinkAssinatura,
@@ -366,6 +406,7 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     }),
     [
       iniciarEntrega,
+      sincronizarUnidades,
       avancarEtapa,
       gerarDocumento,
       gerarLinkAssinatura,

@@ -1,10 +1,18 @@
-import type { Cliente } from '@/domain/types';
+import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
 import type { CrmAdapter } from '../types';
 import { AdapterNotFoundError } from '../errors';
-import { clientes, unidadeCliente } from '../mock-data';
+import { clientes, empreendimentos, unidades, unidadeCliente } from '../mock-data';
 
-/** CV CRM (mock): resolve o cliente a partir de dados sintéticos locais. */
+/** CV CRM (mock): dados sintéticos locais. */
 export class MockCrmAdapter implements CrmAdapter {
+  async getEmpreendimentos(): Promise<Empreendimento[]> {
+    return empreendimentos.map((e) => ({ ...e }));
+  }
+
+  async getUnidadesByEmpreendimento(empreendimentoId: string): Promise<Unidade[]> {
+    return unidades.filter((u) => u.empreendimentoId === empreendimentoId).map((u) => ({ ...u }));
+  }
+
   async getClienteByUnidade(unidadeId: string): Promise<Cliente> {
     const clienteId = unidadeCliente[unidadeId];
     const cliente = clienteId ? clientes.find((c) => c.id === clienteId) : undefined;

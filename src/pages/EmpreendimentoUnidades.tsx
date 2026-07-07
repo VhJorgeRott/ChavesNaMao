@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Building2, KeyRound } from 'lucide-react';
+import { ArrowLeft, Building2, KeyRound, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adapters } from '@/adapters';
 import { useData } from '@/data/DataProvider';
@@ -9,6 +9,7 @@ import { useSession } from '@/auth/SessionProvider';
 import {
   UNIDADE_STATUS_LIBERADO_PARA_ENTREGA,
   UNIDADE_STATUS_VISIVEIS,
+  type Empreendimento,
 } from '@/domain/types';
 import { UNIDADE_STATUS_META } from '@/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
@@ -34,8 +35,8 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const { currentUser } = useSession();
   const navigate = useNavigate();
 
-  const empreendimento = state.empreendimentos.find((e) => e.id === empreendimentoId);
-
+  const [empreendimento, setEmpreendimento] = useState<Empreendimento | undefined>();
+  const [carregandoEmp, setCarregandoEmp] = useState(true);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<string>(TODOS);
   const [iniciando, setIniciando] = useState<string | null>(null);
@@ -44,10 +45,48 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   >({});
   const [carregandoInfo, setCarregandoInfo] = useState(true);
 
-  // Redireciona se o empreendimento não existe.
+  // Resolve o empreendimento pelo adapter (CRM no live, mock caso contrário).
   useEffect(() => {
-    if (!empreendimento) navigate('/unidades', { replace: true });
-  }, [empreendimento, navigate]);
+    let ativo = true;
+    void adapters.crm
+      .getEmpreendimentos()
+      .then((lista) => {
+        if (!ativo) return;
+        const found = lista.find((e) => e.id === empreendimentoId);
+        setEmpreendimento(found);
+        setCarregandoEmp(false);
+        if (!found) navigate('/unidades', { replace: true });
+      })
+      .catch(() => {
+        if (ativo) {
+          setCarregandoEmp(false);
+          navigate('/unidades', { replace: true });
+        }
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [empreendimentoId, navigate]);
+
+  // Carrega as unidades do empreendimento no CRM (mapa de disponibilidade) e as
+  // sincroniza no estado local, preservando o ciclo de entrega controlado no app.
+  useEffect(() => {
+    let ativo = true;
+    if (!empreendimentoId) return;
+    void adapters.crm
+      .getUnidadesByEmpreendimento(empreendimentoId)
+      .then((lista) => {
+        if (ativo) actions.sincronizarUnidades(empreendimentoId, lista);
+      })
+      .catch((e) => {
+        if (ativo) {
+          toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do CRM');
+        }
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [empreendimentoId, actions]);
 
   // Unidades do empreendimento, apenas com status visíveis.
   const unidades = useMemo(
@@ -118,6 +157,13 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     }
   }
 
+  if (carregandoEmp) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
   if (!empreendimento) return <></>;
 
   return (

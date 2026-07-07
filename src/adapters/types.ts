@@ -8,12 +8,15 @@
  * usuário. Segredos (API tokens) ficam no servidor, nunca no bundle.
  */
 
-import type { Cliente } from '@/domain/types';
+import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
 
 // ---------------------------------------------------------------------------
-// CRM (CV CRM) — dados do cliente a partir da unidade
+// CRM (CV CRM) — cadastro de empreendimentos, unidades e dados do cliente
 // ---------------------------------------------------------------------------
 export interface CrmAdapter {
+  getEmpreendimentos(): Promise<Empreendimento[]>;
+  /** Unidades do empreendimento (mapa de disponibilidade do CV). */
+  getUnidadesByEmpreendimento(empreendimentoId: string): Promise<Unidade[]>;
   getClienteByUnidade(unidadeId: string): Promise<Cliente>;
 }
 

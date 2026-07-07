@@ -9,8 +9,16 @@ import { z } from 'zod';
  * A validação roda uma vez no import; se algo obrigatório faltar, a app falha
  * cedo e de forma explícita em vez de quebrar silenciosamente em runtime.
  */
+const adapterMode = z.enum(['mock', 'live']);
+
 const clientEnvSchema = z.object({
-  VITE_ADAPTER_MODE: z.enum(['mock', 'live']).default('mock'),
+  // Modo global padrão dos adapters...
+  VITE_ADAPTER_MODE: adapterMode.default('mock'),
+  // ...e overrides por integração (permitem migrar uma de cada vez).
+  VITE_CRM_MODE: adapterMode.optional(),
+  VITE_ERP_MODE: adapterMode.optional(),
+  VITE_SIGNATURE_MODE: adapterMode.optional(),
+  VITE_NOTIFICATION_MODE: adapterMode.optional(),
   // Opcionais: em ADAPTER_MODE=mock o Supabase não é usado. São exigidos só
   // quando o cliente Supabase é efetivamente instanciado (ver lib/supabase.ts).
   VITE_SUPABASE_URL: z.string().url().optional(),
