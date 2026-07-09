@@ -57,6 +57,58 @@ O(A) cliente declara receber a unidade em perfeitas condições, dando plena qui
 _______________________________
 {{cliente.nome}}`;
 
+const MODELO_CONFISSAO_DIVIDA = `TERMO DE CONFISSÃO DE DÍVIDA
+(Venda Direta)
+
+Contrato nº {{financeiro.contrato}}
+
+CREDORA: {{credor.razaoSocial}}, inscrita no CNPJ sob o nº {{credor.cnpj}}, com sede em {{credor.endereco}}, doravante denominada CREDORA.
+
+DEVEDOR(A): {{cliente.nome}}, {{cliente.nacionalidade}}, {{cliente.estadoCivil}}, {{cliente.profissao}}, portador(a) do RG nº {{cliente.rg}} e inscrito(a) no CPF sob o nº {{cliente.cpf}}, residente e domiciliado(a) em {{cliente.endereco}}, e-mail {{cliente.email}}, telefone {{cliente.telefone}}, doravante denominado(a) DEVEDOR(A).
+
+DO IMÓVEL
+Unidade {{unidade.identificacao}}, Quadra {{imovel.quadra}}, Lote {{imovel.lote}}, do empreendimento {{empreendimento.nome}}, situado em {{empreendimento.cidade}}/{{empreendimento.uf}}, com área privativa de {{unidade.area}}, objeto da matrícula nº {{imovel.matricula}} do {{imovel.cartorio}}.
+
+DA CONFISSÃO DA DÍVIDA
+O(A) DEVEDOR(A) reconhece e confessa dever à CREDORA, de forma líquida, certa e exigível, a quantia total de {{divida.valorTotal}} ({{divida.valorTotalExtenso}}), referente ao saldo do imóvel acima identificado, assim discriminada:
+
+- Valor total do contrato: {{financeiro.valorContrato}}
+- Valor de entrada: {{divida.valorEntrada}}
+- Saldo devedor confessado: {{financeiro.saldoDevedor}}
+- Nº de parcelas: {{divida.numeroParcelas}} (em aberto: {{financeiro.parcelasEmAberto}})
+- Valor de cada parcela: {{divida.valorParcela}} ({{divida.valorParcelaExtenso}})
+- Vencimento da 1ª parcela: {{divida.vencimentoPrimeira}}
+- Forma de pagamento: {{divida.formaPagamento}}
+
+DA CORREÇÃO E DOS ENCARGOS
+As parcelas serão corrigidas pelo índice {{divida.indiceCorrecao}}. Em caso de atraso, incidirão multa de {{divida.multaAtraso}} e juros de mora de {{divida.jurosMora}}, sem prejuízo da atualização monetária.
+
+DO VENCIMENTO ANTECIPADO
+O não pagamento de qualquer parcela no vencimento acarretará o vencimento antecipado de toda a dívida, tornando-a imediatamente exigível, independentemente de notificação.
+
+DO FORO
+Fica eleito o foro da comarca de {{geral.foro}} para dirimir quaisquer questões oriundas deste termo.
+
+E por estarem assim justas e contratadas, as partes assinam o presente instrumento.
+
+{{empreendimento.cidade}}, {{data.hoje}}.
+
+
+_______________________________
+{{cliente.nome}} (DEVEDOR(A))
+
+
+_______________________________
+{{credor.razaoSocial}} (CREDORA)
+
+
+_______________________________
+Testemunha 1: {{geral.testemunha1}}
+
+
+_______________________________
+Testemunha 2: {{geral.testemunha2}}`;
+
 const HASH_PLACEHOLDER = 'a'.repeat(64);
 
 export const USUARIO_ADMIN: AppUser = {
@@ -236,6 +288,13 @@ export function createInitialState(): DbState {
         id: 'mod-0001',
         nome: 'Termo de Entrega de Chaves (padrão)',
         conteudo: MODELO_PADRAO,
+        createdAt: '2026-06-01T12:00:00Z',
+        updatedAt: '2026-06-01T12:00:00Z',
+      },
+      {
+        id: 'mod-0002',
+        nome: 'Termo de Confissão de Dívida (genérico)',
+        conteudo: MODELO_CONFISSAO_DIVIDA,
         createdAt: '2026-06-01T12:00:00Z',
         updatedAt: '2026-06-01T12:00:00Z',
       },

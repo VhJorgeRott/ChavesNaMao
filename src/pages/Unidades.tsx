@@ -25,7 +25,7 @@ function StatPill({ status, value }: { status: UnidadeStatus; value: number }): 
 }
 
 export function Unidades(): React.JSX.Element {
-  const { state } = useData();
+  const { state, actions } = useData();
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
 
@@ -41,6 +41,7 @@ export function Unidades(): React.JSX.Element {
       .then((lista) => {
         if (!ativo) return;
         setEmpreendimentos(lista);
+        actions.sincronizarEmpreendimentos(lista);
         setErro(null);
       })
       .catch((e) => {

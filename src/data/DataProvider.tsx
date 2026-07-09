@@ -8,12 +8,10 @@ import {
   type ReactNode,
 } from 'react';
 import { adapters } from '@/adapters';
+import { AdapterError } from '@/adapters/errors';
+import type { UnidadeErp } from '@/adapters/types';
 import { transicionar } from '@/domain/state-machine';
-import {
-  UNIDADE_STATUS_LIBERADO_PARA_ENTREGA,
-  type EntregaStatus,
-  type Unidade,
-} from '@/domain/types';
+import { type Cliente, type Documento, type Empreendimento, type EntregaStatus, TIPO_DOCUMENTO, type Unidade } from '@/domain/types';
 import { buildPortalUrl, generateToken, hashToken, timingSafeEqualHex } from '@/lib/token';
 import { env } from '@/lib/env';
 import { logAtividade } from '@/lib/atividade';
@@ -31,7 +29,15 @@ export type PortalResultado =
 
 export interface DataActions {
   iniciarEntrega(unidadeId: string, responsavelId: string): Promise<string>;
+  /**
+   * Fluxo "enviar termo" para uma unidade: inicia a entrega (ou reaproveita a
+   * ativa), gera o termo e o link de assinatura, avançando até ASSINATURA e
+   * notificando o cliente. Base da ação em massa.
+   */
+  enviarTermoEntrega(unidadeId: string, responsavelId: string): Promise<string>;
   sincronizarUnidades(empreendimentoId: string, unidades: Unidade[]): void;
+  /** Persiste (upsert) empreendimentos carregados do CRM para as telas resolverem pelo id. */
+  sincronizarEmpreendimentos(empreendimentos: Empreendimento[]): void;
   avancarEtapa(entregaId: string, proximo: EntregaStatus, actorId: string): Promise<void>;
   gerarDocumento(entregaId: string, actorId: string): Promise<void>;
   gerarLinkAssinatura(entregaId: string, actorId: string): Promise<{ token: string; url: string }>;
@@ -94,15 +100,61 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     [],
   );
 
+  // Resolve o cliente de uma unidade. No live, `getClienteByUnidade` do CV CRM
+  // ainda é um stub (AdapterNotImplementedError): nesse caso caímos para o nome
+  // que o ERP (Mega) já trouxe na sincronização, criando um cliente mínimo e
+  // persistindo-o no estado para as telas de entrega o resolverem pelo id.
+  // Qualquer outro erro (rede, validação) propaga — nunca é engolido.
+  // Resolve o cliente de uma unidade. A unidade em tela vem do ERP (Mega), que
+  // já traz o nome do cliente; usamos esse nome como dica para o CV localizar a
+  // pessoa (CPF/e-mail/telefone). Se o CRM estiver indisponível ou não achar a
+  // pessoa (qualquer AdapterError), caímos para um cliente mínimo com o nome do
+  // ERP e o persistimos, para nunca travar a entrega. Erros inesperados propagam.
+  const resolverCliente = useCallback(async (unidadeId: string): Promise<Cliente> => {
+    const unidadeErp = stateRef.current.unidades.find((u) => u.id === unidadeId) as
+      | Partial<UnidadeErp>
+      | undefined;
+    const nome = unidadeErp?.clienteNome?.trim() || null;
+    try {
+      const cliente = await adapters.crm.getClienteByUnidade(unidadeId, { nome });
+      // Persiste (upsert) o cliente resolvido para que as telas de entrega o
+      // encontrem pelo `entrega.clienteId`. Sem isso, os dados vêm do CRM mas
+      // nunca chegam ao estado e o cadastro aparece em branco.
+      setState((st) => ({
+        ...st,
+        clientes: [...st.clientes.filter((c) => c.id !== cliente.id), cliente],
+      }));
+      return cliente;
+    } catch (e) {
+      if (!(e instanceof AdapterError)) throw e;
+      console.warn('[resolverCliente] CRM indisponível — usando nome do ERP:', e.message);
+      const s = stateRef.current;
+      const clienteId = `cli-uni-${unidadeId}`;
+      const existente = s.clientes.find((c) => c.id === clienteId);
+      if (existente) return existente;
+      const cliente: Cliente = {
+        id: clienteId,
+        nome: nome || 'Cliente',
+        cpf: '',
+        email: '',
+        telefone: '',
+        createdAt: new Date().toISOString(),
+      };
+      setState((st) =>
+        st.clientes.some((c) => c.id === clienteId)
+          ? st
+          : { ...st, clientes: [...st.clientes, cliente] },
+      );
+      return cliente;
+    }
+  }, []);
+
   const iniciarEntrega = useCallback(
     async (unidadeId: string, responsavelId: string): Promise<string> => {
       const unidade = stateRef.current.unidades.find((u) => u.id === unidadeId);
       if (!unidade) throw new Error('Unidade não encontrada');
-      if (!UNIDADE_STATUS_LIBERADO_PARA_ENTREGA.includes(unidade.status)) {
-        throw new Error('Unidade não está liberada para entrega');
-      }
-      // Carrega o cliente via adapter de CRM (mock no MVP).
-      const cliente = await adapters.crm.getClienteByUnidade(unidadeId);
+      // Resolve o cliente (CRM live com fallback para o nome vindo do ERP).
+      const cliente = await resolverCliente(unidadeId);
       const entregaId = nextId('ent');
       const agora = new Date().toISOString();
       setState((s) => ({
@@ -124,7 +176,96 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       pushAudit(responsavelId, 'ENTREGA_INICIADA', 'entrega', entregaId, { unidadeId });
       return entregaId;
     },
-    [pushAudit],
+    [pushAudit, resolverCliente],
+  );
+
+  const enviarTermoEntrega = useCallback(
+    async (unidadeId: string, responsavelId: string): Promise<string> => {
+      const s0 = stateRef.current;
+      const unidade = s0.unidades.find((u) => u.id === unidadeId);
+      if (!unidade) throw new Error('Unidade não encontrada');
+
+      // Reaproveita a entrega em andamento (não concluída) ou cria uma nova.
+      const ativa = s0.entregas.find((e) => e.unidadeId === unidadeId && e.status !== 'CONCLUIDA');
+      const agora = new Date().toISOString();
+      const novaEntrega = ativa === undefined;
+      let entregaId: string;
+      let clienteId: string;
+      if (ativa) {
+        entregaId = ativa.id;
+        clienteId = ativa.clienteId;
+      } else {
+        const cliente = await resolverCliente(unidadeId);
+        entregaId = nextId('ent');
+        clienteId = cliente.id;
+      }
+
+      // Gera o termo (documento) se ainda não existir para esta entrega.
+      let doc: Documento | null = null;
+      if (!s0.documentos.some((d) => d.entregaId === entregaId)) {
+        const conteudo = `Termo de Entrega de Chaves — ${entregaId} — ${agora}`;
+        doc = {
+          id: nextId('doc'),
+          entregaId,
+          tipo: 'Termo de Entrega de Chaves',
+          storagePath: `entregas/${entregaId}/termo-entrega.pdf`,
+          sha256Hash: await hashToken(conteudo),
+          geradoEm: agora,
+        };
+      }
+
+      // Link de assinatura (uso único, 72h) — invalida tokens anteriores.
+      const { token, tokenHash } = await generateToken();
+      const url = buildPortalUrl(env.VITE_PUBLIC_APP_URL, token);
+      const expires = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+
+      setState((s) => ({
+        ...s,
+        entregas: novaEntrega
+          ? [
+              ...s.entregas,
+              {
+                id: entregaId,
+                unidadeId,
+                clienteId,
+                status: 'ASSINATURA',
+                responsavelId,
+                iniciadaEm: agora,
+                concluidaEm: null,
+                createdAt: agora,
+              },
+            ]
+          : s.entregas.map((e) => (e.id === entregaId ? { ...e, status: 'ASSINATURA' } : e)),
+        documentos: doc ? [...s.documentos, doc] : s.documentos,
+        tokens: [
+          ...s.tokens.filter((t) => t.entregaId !== entregaId),
+          {
+            id: nextId('tok'),
+            entregaId,
+            tokenHash,
+            expiresAt: expires,
+            usedAt: null,
+            scope: 'assinatura',
+            createdAt: agora,
+          },
+        ],
+      }));
+
+      if (novaEntrega) {
+        pushAudit(responsavelId, 'ENTREGA_INICIADA', 'entrega', entregaId, { unidadeId });
+      }
+      if (doc) pushAudit(responsavelId, 'DOCUMENTO_GERADO', 'documento', doc.id, { entregaId });
+      pushAudit(responsavelId, 'ETAPA_ASSINATURA', 'entrega', entregaId, {});
+      await adapters.notification.notificar({
+        tipo: 'LINK_ASSINATURA_GERADO',
+        para: 'cliente',
+        entregaId,
+        linkAssinatura: url,
+      });
+      pushAudit(responsavelId, 'LINK_ASSINATURA_GERADO', 'entrega', entregaId, {});
+      return entregaId;
+    },
+    [pushAudit, resolverCliente],
   );
 
   // Mescla as unidades vindas do CRM (live) com o estado local. O baseline de
@@ -161,26 +302,47 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     [],
   );
 
+  // Persiste (upsert) empreendimentos vindos do CRM. Sem isso, as telas de
+  // entrega não resolvem o empreendimento da unidade (fica "-"), pois o estado
+  // global só tinha os dados semente.
+  const sincronizarEmpreendimentos = useCallback((lista: Empreendimento[]): void => {
+    if (lista.length === 0) return;
+    setState((s) => {
+      const ids = new Set(lista.map((e) => e.id));
+      return { ...s, empreendimentos: [...s.empreendimentos.filter((e) => !ids.has(e.id)), ...lista] };
+    });
+  }, []);
+
   const gerarDocumento = useCallback(
     async (entregaId: string, actorId: string): Promise<void> => {
-      const conteudo = `Termo de Entrega de Chaves — ${entregaId} — ${new Date().toISOString()}`;
-      const sha256 = await hashToken(conteudo);
-      const docId = nextId('doc');
-      setState((s) => ({
-        ...s,
-        documentos: [
-          ...s.documentos,
-          {
-            id: docId,
-            entregaId,
-            tipo: 'Termo de Entrega de Chaves',
-            storagePath: `entregas/${entregaId}/termo-entrega.pdf`,
-            sha256Hash: sha256,
-            geradoEm: new Date().toISOString(),
-          },
-        ],
-      }));
-      pushAudit(actorId, 'DOCUMENTO_GERADO', 'documento', docId, { entregaId });
+      // Gera os DOIS termos do processo: Confissão de Dívida (assinada via
+      // Clicksign) e Recebimento de Chaves (assinado presencialmente no canvas).
+      const carimbo = new Date().toISOString();
+      const tipos = [TIPO_DOCUMENTO.CONFISSAO_DIVIDA, TIPO_DOCUMENTO.RECEBIMENTO_CHAVES] as const;
+      const arquivos: Record<string, string> = {
+        [TIPO_DOCUMENTO.CONFISSAO_DIVIDA]: 'confissao-divida.pdf',
+        [TIPO_DOCUMENTO.RECEBIMENTO_CHAVES]: 'recebimento-chaves.pdf',
+      };
+      const novos: Documento[] = [];
+      for (const tipo of tipos) {
+        if (stateRef.current.documentos.some((d) => d.entregaId === entregaId && d.tipo === tipo)) {
+          continue;
+        }
+        const conteudo = `${tipo} — ${entregaId} — ${carimbo}`;
+        novos.push({
+          id: nextId('doc'),
+          entregaId,
+          tipo,
+          storagePath: `entregas/${entregaId}/${arquivos[tipo]}`,
+          sha256Hash: await hashToken(conteudo),
+          geradoEm: new Date().toISOString(),
+        });
+      }
+      if (novos.length === 0) return;
+      setState((s) => ({ ...s, documentos: [...s.documentos, ...novos] }));
+      for (const d of novos) {
+        pushAudit(actorId, 'DOCUMENTO_GERADO', 'documento', d.id, { entregaId, tipo: d.tipo });
+      }
     },
     [pushAudit],
   );
@@ -395,7 +557,9 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   const actions = useMemo<DataActions>(
     () => ({
       iniciarEntrega,
+      enviarTermoEntrega,
       sincronizarUnidades,
+      sincronizarEmpreendimentos,
       avancarEtapa,
       gerarDocumento,
       gerarLinkAssinatura,
@@ -410,7 +574,9 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     }),
     [
       iniciarEntrega,
+      enviarTermoEntrega,
       sincronizarUnidades,
+      sincronizarEmpreendimentos,
       avancarEtapa,
       gerarDocumento,
       gerarLinkAssinatura,

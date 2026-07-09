@@ -7,3 +7,6 @@ verify_jwt = true
 
 [functions.mega-unidades]
 verify_jwt = true
+
+[functions.crm-cliente]
+verify_jwt = true

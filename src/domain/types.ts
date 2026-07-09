@@ -108,6 +108,18 @@ export interface Documento {
   geradoEm: string;
 }
 
+/**
+ * Tipos de termo do processo de entrega. A Confissão de Dívida é enviada pela CR
+ * e assinada eletronicamente (Clicksign); o Recebimento de Chaves é assinado
+ * presencialmente (canvas) no dia da entrega, pelo cliente e pela equipe de AT.
+ * O valor é o próprio rótulo exibido (Documento.tipo é texto livre).
+ */
+export const TIPO_DOCUMENTO = {
+  CONFISSAO_DIVIDA: 'Termo de Confissão de Dívida',
+  RECEBIMENTO_CHAVES: 'Termo de Recebimento de Chaves',
+} as const;
+export type TipoDocumento = (typeof TIPO_DOCUMENTO)[keyof typeof TIPO_DOCUMENTO];
+
 export interface Assinatura {
   id: string;
   entregaId: string;

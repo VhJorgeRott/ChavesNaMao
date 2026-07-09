@@ -14,7 +14,7 @@ describe('createAdapters', () => {
 
   it('live é selecionável e ainda não conectado (lança NotImplemented)', async () => {
     const a = createAdapters('live');
-    await expect(a.crm.getClienteByUnidade('uni-0001')).rejects.toBeInstanceOf(
+    await expect(a.erp.getSituacaoFinanceira('uni-0001')).rejects.toBeInstanceOf(
       AdapterNotImplementedError,
     );
   });

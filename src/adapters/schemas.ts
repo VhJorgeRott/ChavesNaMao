@@ -39,3 +39,13 @@ export const unidadeSchema = z.object({
   inadimplente: z.boolean().optional(),
   createdAt: z.string(),
 });
+
+/** Cliente resolvido pela Edge Function `crm-cliente` (cadastro de pessoas do CV). */
+export const clienteSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  cpf: z.string(),
+  email: z.string(),
+  telefone: z.string(),
+  createdAt: z.string(),
+});

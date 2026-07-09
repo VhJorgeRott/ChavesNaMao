@@ -14,7 +14,19 @@ export interface TermoContexto {
   unidade?: Unidade;
   empreendimento?: Empreendimento;
   financeiro?: SituacaoFinanceira;
+  /**
+   * Valores manuais para campos sem fonte automática (ex.: matrícula do imóvel,
+   * cartório, valores por extenso, dados do credor). Indexados pela chave da
+   * variável (`{{grupo.campo}}`). Ausentes renderizam vazio (linha preenchível).
+   */
+  extras?: Record<string, string>;
 }
+
+/** Resolvedor de um campo manual: lê de `extras` pela chave, ou vazio. */
+const extra =
+  (chave: string) =>
+  (c: TermoContexto): string =>
+    c.extras?.[chave] ?? '';
 
 /** Resolvedores por chave de variável. */
 const RESOLVERS: Record<string, (c: TermoContexto) => string> = {
@@ -33,6 +45,34 @@ const RESOLVERS: Record<string, (c: TermoContexto) => string> = {
   'financeiro.parcelasEmAberto': (c) =>
     c.financeiro ? String(c.financeiro.parcelasEmAberto) : '',
   'data.hoje': () => fData(new Date()),
+  // --- Campos adicionais da Confissão de Dívida (manuais via `extras`) ---
+  'credor.razaoSocial': (c) =>
+    c.extras?.['credor.razaoSocial'] || 'Rottas Construtora e Incorporadora Ltda.',
+  'credor.cnpj': extra('credor.cnpj'),
+  'credor.endereco': extra('credor.endereco'),
+  'cliente.rg': extra('cliente.rg'),
+  'cliente.nacionalidade': extra('cliente.nacionalidade'),
+  'cliente.estadoCivil': extra('cliente.estadoCivil'),
+  'cliente.profissao': extra('cliente.profissao'),
+  'cliente.endereco': extra('cliente.endereco'),
+  'imovel.matricula': extra('imovel.matricula'),
+  'imovel.cartorio': extra('imovel.cartorio'),
+  'imovel.quadra': extra('imovel.quadra'),
+  'imovel.lote': extra('imovel.lote'),
+  'divida.valorTotal': extra('divida.valorTotal'),
+  'divida.valorTotalExtenso': extra('divida.valorTotalExtenso'),
+  'divida.valorEntrada': extra('divida.valorEntrada'),
+  'divida.numeroParcelas': extra('divida.numeroParcelas'),
+  'divida.valorParcela': extra('divida.valorParcela'),
+  'divida.valorParcelaExtenso': extra('divida.valorParcelaExtenso'),
+  'divida.vencimentoPrimeira': extra('divida.vencimentoPrimeira'),
+  'divida.indiceCorrecao': extra('divida.indiceCorrecao'),
+  'divida.jurosMora': extra('divida.jurosMora'),
+  'divida.multaAtraso': extra('divida.multaAtraso'),
+  'divida.formaPagamento': extra('divida.formaPagamento'),
+  'geral.foro': extra('geral.foro'),
+  'geral.testemunha1': extra('geral.testemunha1'),
+  'geral.testemunha2': extra('geral.testemunha2'),
 };
 
 export interface VariavelInfo {
@@ -77,7 +117,55 @@ export const CATALOGO_VARIAVEIS: GrupoVariaveis[] = [
   },
   {
     grupo: 'Geral',
-    itens: [{ chave: 'data.hoje', label: 'Data de hoje' }],
+    itens: [
+      { chave: 'data.hoje', label: 'Data de hoje' },
+      { chave: 'geral.foro', label: 'Foro (comarca)' },
+      { chave: 'geral.testemunha1', label: 'Testemunha 1' },
+      { chave: 'geral.testemunha2', label: 'Testemunha 2' },
+    ],
+  },
+  {
+    grupo: 'Credor',
+    itens: [
+      { chave: 'credor.razaoSocial', label: 'Razão social' },
+      { chave: 'credor.cnpj', label: 'CNPJ' },
+      { chave: 'credor.endereco', label: 'Endereço' },
+    ],
+  },
+  {
+    grupo: 'Devedor (dados adicionais)',
+    itens: [
+      { chave: 'cliente.rg', label: 'RG' },
+      { chave: 'cliente.nacionalidade', label: 'Nacionalidade' },
+      { chave: 'cliente.estadoCivil', label: 'Estado civil' },
+      { chave: 'cliente.profissao', label: 'Profissão' },
+      { chave: 'cliente.endereco', label: 'Endereço' },
+    ],
+  },
+  {
+    grupo: 'Imóvel',
+    itens: [
+      { chave: 'imovel.matricula', label: 'Matrícula' },
+      { chave: 'imovel.cartorio', label: 'Cartório de registro' },
+      { chave: 'imovel.quadra', label: 'Quadra' },
+      { chave: 'imovel.lote', label: 'Lote' },
+    ],
+  },
+  {
+    grupo: 'Dívida (Confissão)',
+    itens: [
+      { chave: 'divida.valorTotal', label: 'Valor total' },
+      { chave: 'divida.valorTotalExtenso', label: 'Valor total (por extenso)' },
+      { chave: 'divida.valorEntrada', label: 'Valor de entrada' },
+      { chave: 'divida.numeroParcelas', label: 'Nº de parcelas' },
+      { chave: 'divida.valorParcela', label: 'Valor da parcela' },
+      { chave: 'divida.valorParcelaExtenso', label: 'Valor da parcela (por extenso)' },
+      { chave: 'divida.vencimentoPrimeira', label: 'Vencimento da 1ª parcela' },
+      { chave: 'divida.indiceCorrecao', label: 'Índice de correção' },
+      { chave: 'divida.jurosMora', label: 'Juros de mora' },
+      { chave: 'divida.multaAtraso', label: 'Multa por atraso' },
+      { chave: 'divida.formaPagamento', label: 'Forma de pagamento' },
+    ],
   },
 ];
 

@@ -13,7 +13,10 @@ export class MockCrmAdapter implements CrmAdapter {
     return unidades.filter((u) => u.empreendimentoId === empreendimentoId).map((u) => ({ ...u }));
   }
 
-  async getClienteByUnidade(unidadeId: string): Promise<Cliente> {
+  async getClienteByUnidade(
+    unidadeId: string,
+    _busca?: { nome?: string | null; documento?: string | null },
+  ): Promise<Cliente> {
     const clienteId = unidadeCliente[unidadeId];
     const cliente = clienteId ? clientes.find((c) => c.id === clienteId) : undefined;
     if (!cliente) {

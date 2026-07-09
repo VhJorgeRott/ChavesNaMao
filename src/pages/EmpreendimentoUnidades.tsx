@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   KeyRound,
   Loader2,
+  Send,
   Tag,
   TriangleAlert,
   type LucideIcon,
@@ -18,17 +19,19 @@ import { useData } from '@/data/DataProvider';
 import { listarUnidades, type UnidadeResumo } from '@/data/selectors';
 import { useSession } from '@/auth/SessionProvider';
 import {
-  UNIDADE_STATUS_LIBERADO_PARA_ENTREGA,
   UNIDADE_STATUS_VISIVEIS,
   type Empreendimento,
+  type Unidade,
 } from '@/domain/types';
 import { UNIDADE_STATUS_META } from '@/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { InadimplenciaBadge, UnidadeStatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { UnidadeDetalheDialog } from '@/components/unidades/UnidadeDetalheDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -92,6 +95,9 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const [inadimplenciaFiltro, setInadimplenciaFiltro] = useState<string>(TODOS);
   const [ordenacao, setOrdenacao] = useState<Ordenacao>({ campo: 'cliente', dir: 'asc' });
   const [iniciando, setIniciando] = useState<string | null>(null);
+  const [detalhe, setDetalhe] = useState<UnidadeResumo | null>(null);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [enviandoMassa, setEnviandoMassa] = useState(false);
   const [infoIntegracao, setInfoIntegracao] = useState<
     Record<string, { cliente?: string; contrato?: string; inadimplente?: boolean }>
   >({});
@@ -106,6 +112,7 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
         if (!ativo) return;
         const found = lista.find((e) => e.id === empreendimentoId);
         setEmpreendimento(found);
+        if (found) actions.sincronizarEmpreendimentos([found]);
         setCarregandoEmp(false);
         if (!found) navigate('/unidades', { replace: true });
       })
@@ -127,11 +134,28 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     let ativo = true;
     if (!empreendimento) return;
     setCarregandoInfo(true);
-    void adapters.erp
-      .getUnidadesByEmpreendimento(empreendimento.id, empreendimento.nome)
-      .then((lista) => {
+    // A view de parcelas do Mega não traz área; a área vem do CV. Buscamos as
+    // unidades do CV em paralelo e mesclamos a área pelo número da unidade
+    // (último segmento da identificação, normalizado). Best-effort: sem match, a
+    // área permanece nula (sem regressão).
+    const chaveArea = (ident: string): string =>
+      (ident.split('·').pop() ?? '').replace(/\s+/g, '').toUpperCase();
+    void Promise.all([
+      adapters.erp.getUnidadesByEmpreendimento(empreendimento.id, empreendimento.nome),
+      adapters.crm.getUnidadesByEmpreendimento(empreendimento.id).catch(() => [] as Unidade[]),
+    ])
+      .then(([lista, cvUnidades]) => {
         if (!ativo) return;
-        actions.sincronizarUnidades(empreendimento.id, lista);
+        const areaPorChave = new Map<string, number>();
+        for (const u of cvUnidades) {
+          if (u.areaM2 != null && u.areaM2 > 0) areaPorChave.set(chaveArea(u.identificacao), u.areaM2);
+        }
+        const enriquecida = lista.map((u) =>
+          u.areaM2 == null
+            ? { ...u, areaM2: areaPorChave.get(chaveArea(u.identificacao)) ?? null }
+            : u,
+        );
+        actions.sincronizarUnidades(empreendimento.id, enriquecida);
         setInfoIntegracao(
           Object.fromEntries(
             lista.map((u) => {
@@ -245,6 +269,58 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     }
   }
 
+  // Seleção limitada às linhas atualmente visíveis (após busca/filtro/ordenação).
+  const selecionadasVisiveis = useMemo(
+    () => ordenadas.filter((r) => selecionadas.has(r.unidade.id)),
+    [ordenadas, selecionadas],
+  );
+  const todasSelecionadas =
+    ordenadas.length > 0 && selecionadasVisiveis.length === ordenadas.length;
+  const algumaSelecionada = selecionadasVisiveis.length > 0 && !todasSelecionadas;
+
+  function alternarUma(id: string) {
+    setSelecionadas((atual) => {
+      const nova = new Set(atual);
+      if (nova.has(id)) nova.delete(id);
+      else nova.add(id);
+      return nova;
+    });
+  }
+
+  function alternarTodas() {
+    setSelecionadas((atual) => {
+      const nova = new Set(atual);
+      if (ordenadas.every((r) => nova.has(r.unidade.id)) && ordenadas.length > 0) {
+        ordenadas.forEach((r) => nova.delete(r.unidade.id));
+      } else {
+        ordenadas.forEach((r) => nova.add(r.unidade.id));
+      }
+      return nova;
+    });
+  }
+
+  async function enviarTermosEmMassa() {
+    const ids = selecionadasVisiveis.map((r) => r.unidade.id);
+    if (ids.length === 0) return;
+    setEnviandoMassa(true);
+    try {
+      const resultados = await Promise.allSettled(
+        ids.map((id) => actions.enviarTermoEntrega(id, currentUser.id)),
+      );
+      const ok = resultados.filter((r) => r.status === 'fulfilled').length;
+      const falhas = resultados.length - ok;
+      if (ok > 0) {
+        toast.success(`${ok} termo(s) enviado(s) ao cliente para assinatura`);
+      }
+      if (falhas > 0) {
+        toast.error(`${falhas} unidade(s) não puderam receber o termo`);
+      }
+      setSelecionadas(new Set());
+    } finally {
+      setEnviandoMassa(false);
+    }
+  }
+
   if (carregandoEmp) {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
@@ -346,11 +422,43 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
           </Select>
         </div>
 
+        {selecionadasVisiveis.length > 0 && (
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm font-medium text-foreground">
+              {selecionadasVisiveis.length} unidade(s) selecionada(s)
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelecionadas(new Set())}
+                disabled={enviandoMassa}
+              >
+                Limpar seleção
+              </Button>
+              <Button size="sm" onClick={enviarTermosEmMassa} disabled={enviandoMassa}>
+                {enviandoMassa ? <Loader2 className="animate-spin" /> : <Send />}
+                {enviandoMassa ? 'Enviando...' : 'Enviar termo em massa'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-sm">
               <thead className="bg-muted text-muted-foreground">
                 <tr>
+                  <th className="w-10 px-4 py-3">
+                    <Checkbox
+                      aria-label="Selecionar todas as unidades"
+                      checked={todasSelecionadas}
+                      ref={(el) => {
+                        if (el) el.indeterminate = algumaSelecionada;
+                      }}
+                      onChange={alternarTodas}
+                    />
+                  </th>
                   <ThOrdenavel campo="contrato" label="Contrato" ordenacao={ordenacao} onSort={alternarOrdem} />
                   <ThOrdenavel campo="cliente" label="Cliente" ordenacao={ordenacao} onSort={alternarOrdem} />
                   <ThOrdenavel campo="unidade" label="Unidade" ordenacao={ordenacao} onSort={alternarOrdem} />
@@ -363,12 +471,22 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
               <tbody>
                 {ordenadas.map((resumo) => {
                   const { unidade, entregaAtiva } = resumo;
-                  const liberada = UNIDADE_STATUS_LIBERADO_PARA_ENTREGA.includes(unidade.status);
+                  const selecionada = selecionadas.has(unidade.id);
                   return (
                     <tr
                       key={unidade.id}
-                      className="border-b border-border/60 last:border-0 hover:bg-muted/30"
+                      className={cn(
+                        'border-b border-border/60 last:border-0 hover:bg-muted/30',
+                        selecionada && 'bg-primary/5',
+                      )}
                     >
+                      <td className="px-4 py-3">
+                        <Checkbox
+                          aria-label={`Selecionar ${unidade.identificacao}`}
+                          checked={selecionada}
+                          onChange={() => alternarUma(unidade.id)}
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium text-foreground">
                         {carregandoInfo ? (
                           <Skeleton className="h-4 w-20" />
@@ -387,7 +505,15 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                           ))
                         )}
                       </td>
-                      <td className="px-4 py-3 text-foreground">{unidade.identificacao}</td>
+                      <td className="px-4 py-3 text-foreground">
+                        <button
+                          type="button"
+                          onClick={() => setDetalhe(resumo)}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {unidade.identificacao}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground max-md:hidden">
                         {fArea(unidade.areaM2)}
                       </td>
@@ -417,7 +543,7 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                         ) : (
                           <Button
                             size="sm"
-                            disabled={!liberada || iniciando === unidade.id}
+                            disabled={iniciando === unidade.id}
                             onClick={() => iniciar(resumo)}
                           >
                             <KeyRound />
@@ -447,6 +573,21 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             ))}
         </div>
       </PageContent>
+
+      <UnidadeDetalheDialog
+        resumo={detalhe}
+        info={detalhe ? infoIntegracao[detalhe.unidade.id] : undefined}
+        onOpenChange={(open) => {
+          if (!open) setDetalhe(null);
+        }}
+        iniciando={detalhe ? iniciando === detalhe.unidade.id : false}
+        onIniciar={() => {
+          if (detalhe) void iniciar(detalhe);
+        }}
+        onVerEntrega={() => {
+          if (detalhe?.entregaAtiva) navigate(`/entregas/${detalhe.entregaAtiva.id}`);
+        }}
+      />
     </>
   );
 }

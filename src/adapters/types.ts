@@ -18,7 +18,15 @@ export interface CrmAdapter {
   getEmpreendimentos(): Promise<Empreendimento[]>;
   /** Unidades do empreendimento (mapa de disponibilidade do CV). */
   getUnidadesByEmpreendimento(empreendimentoId: string): Promise<Unidade[]>;
-  getClienteByUnidade(unidadeId: string): Promise<Cliente>;
+  /**
+   * Cliente da unidade. Como a unidade em tela vem do ERP (Mega), que não
+   * conhece o `idpessoa` do CV, a resolução usa uma dica de busca (`nome` ou
+   * `documento`) já disponível no app para localizar a pessoa no cadastro do CV.
+   */
+  getClienteByUnidade(
+    unidadeId: string,
+    busca?: { nome?: string | null; documento?: string | null },
+  ): Promise<Cliente>;
 }
 
 // ---------------------------------------------------------------------------

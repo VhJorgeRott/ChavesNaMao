@@ -31,7 +31,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { copyToClipboard, downloadText } from '@/lib/browser';
+import { copyToClipboard, imprimirDocumento } from '@/lib/browser';
+import { renderTermo } from '@/domain/termo';
 import { fArea, fData, fDataHora, maskCpf } from '@/lib/format';
 
 export function EntregaDetalhe(): React.JSX.Element {
@@ -89,10 +90,24 @@ export function EntregaDetalhe(): React.JSX.Element {
   }
 
   function baixarDoc(tipo: string) {
-    downloadText(
-      `termo-entrega-${entrega.id}.txt`,
-      `${tipo}\n\nCliente: ${cliente?.nome}\nUnidade: ${unidade?.identificacao}\nEmpreendimento: ${empreendimento?.nome}\n\n(Prévia mock — o PDF real é gerado no servidor, etapa 7.)`,
-    );
+    // Renderiza o termo real escolhendo o modelo pelo TIPO do documento
+    // (Confissão de Dívida vs Recebimento de Chaves) e abre a impressão do
+    // navegador (o usuário salva como PDF). Sem modelo, cai para texto mínimo.
+    const ehConfissao = /confiss/i.test(tipo);
+    const modelo =
+      state.modelos.find((m) =>
+        ehConfissao ? /confiss/i.test(m.nome) : /(entrega|recebimento)/i.test(m.nome),
+      ) ?? state.modelos[0];
+    const contexto = {
+      ...(cliente ? { cliente } : {}),
+      ...(unidade ? { unidade } : {}),
+      ...(empreendimento ? { empreendimento } : {}),
+    };
+    const conteudo = modelo
+      ? renderTermo(modelo.conteudo, contexto)
+      : `${tipo}\n\nCliente: ${cliente?.nome ?? '-'}\nUnidade: ${unidade?.identificacao ?? '-'}\n` +
+        `Empreendimento: ${empreendimento?.nome ?? '-'}`;
+    imprimirDocumento(tipo, conteudo);
   }
 
   function adicionarItem() {
