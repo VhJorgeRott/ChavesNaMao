@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, KeyRound, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useData } from '@/data/DataProvider';
-import { getEntregaDetalhe } from '@/data/selectors';
+import type { PortalDelivery } from '@/adapters/types';
 import { SignatureCanvas, type SignatureCanvasHandle } from '@/components/portal/SignatureCanvas';
 import { Button } from '@/components/ui/button';
 import { fArea, maskCpf } from '@/lib/format';
@@ -22,10 +22,10 @@ function pedirGeolocalizacao(): Promise<{ lat: number; lng: number } | null> {
 
 export function Portal(): React.JSX.Element {
   const { token = '' } = useParams();
-  const { state, actions } = useData();
+  const { actions } = useData();
 
   const [fase, setFase] = useState<Fase>('carregando');
-  const [entregaId, setEntregaId] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<PortalDelivery | null>(null);
   const [consentGeo, setConsentGeo] = useState(false);
   const [temTraco, setTemTraco] = useState(false);
   const canvasRef = useRef<SignatureCanvasHandle>(null);
@@ -35,7 +35,9 @@ export function Portal(): React.JSX.Element {
     void actions.resolverToken(token).then((r) => {
       if (!ativo) return;
       if (r.ok) {
-        setEntregaId(r.entregaId);
+        // Dados de exibição vêm do servidor (validados pelo token) — o portal
+        // roda numa sessão anônima, sem o estado interno da aplicação.
+        setDelivery(r.delivery);
         setFase('pronto');
       } else {
         // Resposta idêntica para inválido/expirado/usado — não vaza existência.
@@ -46,8 +48,6 @@ export function Portal(): React.JSX.Element {
       ativo = false;
     };
   }, [token, actions]);
-
-  const detalhe = entregaId ? getEntregaDetalhe(state, entregaId) : null;
 
   async function confirmar() {
     const png = canvasRef.current?.toDataURL();
@@ -101,7 +101,7 @@ export function Portal(): React.JSX.Element {
           </div>
         )}
 
-        {(fase === 'pronto' || fase === 'enviando') && detalhe && (
+        {(fase === 'pronto' || fase === 'enviando') && delivery && (
           <div className="space-y-5">
             <div className="rounded-xl border border-border bg-card p-5">
               <h1 className="text-lg font-bold text-foreground">Termo de Entrega de Chaves</h1>
@@ -109,13 +109,13 @@ export function Portal(): React.JSX.Element {
                 Confira os dados, leia os termos e assine no campo abaixo.
               </p>
               <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                <Linha rotulo="Cliente" valor={detalhe.cliente?.nome} />
-                <Linha rotulo="CPF" valor={detalhe.cliente ? maskCpf(detalhe.cliente.cpf) : undefined} />
-                <Linha rotulo="Unidade" valor={detalhe.unidade?.identificacao} />
-                <Linha rotulo="Empreendimento" valor={detalhe.empreendimento?.nome} />
+                <Linha rotulo="Cliente" valor={delivery.cliente.nome || undefined} />
+                <Linha rotulo="CPF" valor={delivery.cliente.cpf ? maskCpf(delivery.cliente.cpf) : undefined} />
+                <Linha rotulo="Unidade" valor={delivery.unidade.identificacao || undefined} />
+                <Linha rotulo="Empreendimento" valor={delivery.empreendimento.nome || undefined} />
                 <Linha
                   rotulo="Área"
-                  valor={detalhe.unidade ? fArea(detalhe.unidade.areaM2) : undefined}
+                  valor={delivery.unidade.areaM2 != null ? fArea(delivery.unidade.areaM2) : undefined}
                 />
               </dl>
             </div>

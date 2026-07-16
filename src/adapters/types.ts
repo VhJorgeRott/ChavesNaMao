@@ -106,6 +106,57 @@ export interface SignatureAdapter {
 }
 
 // ---------------------------------------------------------------------------
+// Portal do cliente (token de assinatura durável)
+// ---------------------------------------------------------------------------
+// O link de assinatura precisa funcionar em outro dispositivo. Por isso a
+// geração/validação do token e o snapshot da entrega passam por esta interface:
+// `mock` mantém tudo em memória (dev/testes); `live` chama Edge Functions
+// (service_role) que persistem no Postgres. Em nenhum caso o token em claro é
+// gravado — só o link enviado ao cliente o contém.
+
+/** Dados enviados ao gerar o link: chaves externas (CV/Mega/mock) + exibição. */
+export interface PortalSnapshot {
+  entrega: { externalRef: string };
+  empreendimento: { externalRef: string; nome: string; cidade: string; uf: string };
+  unidade: { externalRef: string; identificacao: string; areaM2: number | null; status: string };
+  cliente: {
+    externalRef: string;
+    nome: string;
+    cpf: string;
+    email: string;
+    telefone: string;
+  };
+}
+
+/** Snapshot mínimo de exibição devolvido ao portal após validar o token. */
+export interface PortalDelivery {
+  entregaId: string;
+  cliente: { nome: string; cpf: string };
+  unidade: { identificacao: string; areaM2: number | null };
+  empreendimento: { nome: string; cidade: string; uf: string };
+}
+
+export type PortalResolveResult = { ok: true; delivery: PortalDelivery } | { ok: false };
+export type PortalAssinarResult = { ok: true; entregaId: string } | { ok: false };
+
+export interface PortalAssinarInput {
+  token: string;
+  /** PNG do traço do canvas (dataURL). */
+  pngDataUrl: string;
+  geo: { lat: number; lng: number } | null;
+  userAgent: string;
+}
+
+export interface PortalAdapter {
+  /** Gera (e persiste, no live) o token de assinatura; devolve token em claro + URL. */
+  gerarLink(snapshot: PortalSnapshot): Promise<{ token: string; url: string }>;
+  /** Valida o token e devolve o snapshot de exibição, ou `{ ok: false }` genérico. */
+  resolver(token: string): Promise<PortalResolveResult>;
+  /** Registra a assinatura (uso único do token). */
+  registrarAssinatura(input: PortalAssinarInput): Promise<PortalAssinarResult>;
+}
+
+// ---------------------------------------------------------------------------
 // Notificações (e-mail) — eventos-chave
 // ---------------------------------------------------------------------------
 export type NotificationEvent =
@@ -170,4 +221,5 @@ export interface Adapters {
   signature: SignatureAdapter;
   notification: NotificationAdapter;
   admin: AdminAdapter;
+  portal: PortalAdapter;
 }

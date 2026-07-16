@@ -1,12 +1,37 @@
 project_id = "nosxksihfuiynuzktzjz"
 
-# O gateway do Supabase valida o JWT antes de invocar a função; a identidade do
-# usuário ainda é resolvida do próprio token dentro da função (nunca do body).
+# IMPORTANTE — verify_jwt no GATEWAY x preflight CORS.
+# O preflight OPTIONS do navegador NUNCA carrega o header Authorization. Com
+# verify_jwt = true, o gateway do Supabase barra esse OPTIONS (401 sem CORS) e o
+# navegador reporta "preflight … does not have HTTP ok status". Por isso todas as
+# funções chamadas do navegador ficam com verify_jwt = false e validam o JWT
+# DENTRO da função (auth.getUser) — mantendo a autenticação sem quebrar o CORS.
+
+# Internas (exigem usuário autenticado — checagem via auth.getUser na função):
 [functions.delete-account]
-verify_jwt = true
+verify_jwt = false
 
 [functions.mega-unidades]
-verify_jwt = true
+verify_jwt = false
 
 [functions.crm-cliente]
-verify_jwt = true
+verify_jwt = false
+
+[functions.crm-unidades]
+verify_jwt = false
+
+[functions.crm-empreendimentos]
+verify_jwt = false
+
+# Portal do cliente: gerar o link exige admin autenticado — o JWT (getUser +
+# papel) é validado DENTRO da função.
+[functions.portal-gerar-link]
+verify_jwt = false
+
+# Resolver o token e assinar são chamados pelo cliente SEM login. A autorização é
+# o próprio token de alta entropia, validado dentro da função com service_role.
+[functions.portal-resolver]
+verify_jwt = false
+
+[functions.portal-assinar]
+verify_jwt = false

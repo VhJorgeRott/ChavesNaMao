@@ -18,6 +18,8 @@ import { MockNotificationAdapter } from './notification/mock';
 import { LiveNotificationAdapter } from './notification/live';
 import { MockAdminAdapter } from './admin/mock';
 import { LiveAdminAdapter } from './admin/live';
+import { MockPortalAdapter } from './portal/mock';
+import { LivePortalAdapter } from './portal/live';
 
 const makeCrm = (m: AdapterMode) => (m === 'live' ? new LiveCrmAdapter() : new MockCrmAdapter());
 const makeErp = (m: AdapterMode) => (m === 'live' ? new LiveErpAdapter() : new MockErpAdapter());
@@ -27,6 +29,8 @@ const makeNotification = (m: AdapterMode) =>
   m === 'live' ? new LiveNotificationAdapter() : new MockNotificationAdapter();
 const makeAdmin = (m: AdapterMode) =>
   m === 'live' ? new LiveAdminAdapter() : new MockAdminAdapter();
+const makePortal = (m: AdapterMode) =>
+  m === 'live' ? new LivePortalAdapter() : new MockPortalAdapter();
 
 /** Constrói o conjunto de adapters com um único modo (usado nos testes). */
 export function createAdapters(mode: AdapterMode): Adapters {
@@ -36,6 +40,7 @@ export function createAdapters(mode: AdapterMode): Adapters {
     signature: makeSignature(mode),
     notification: makeNotification(mode),
     admin: makeAdmin(mode),
+    portal: makePortal(mode),
   };
 }
 
@@ -46,6 +51,7 @@ export const adapters: Adapters = {
   signature: makeSignature(env.VITE_SIGNATURE_MODE ?? env.VITE_ADAPTER_MODE),
   notification: makeNotification(env.VITE_NOTIFICATION_MODE ?? env.VITE_ADAPTER_MODE),
   admin: makeAdmin(env.VITE_ADMIN_MODE ?? env.VITE_ADAPTER_MODE),
+  portal: makePortal(env.VITE_PORTAL_MODE ?? env.VITE_ADAPTER_MODE),
 };
 
 export * from './types';

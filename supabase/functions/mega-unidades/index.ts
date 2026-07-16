@@ -19,6 +19,7 @@
 // Deploy:
 //   supabase secrets set FABRIC_TENANT_ID=... FABRIC_CLIENT_ID=... FABRIC_CLIENT_SECRET=...
 //   supabase functions deploy mega-unidades
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -416,6 +417,19 @@ function mapUnidades(rows: ParcelaRow[], empreendimentoId: string) {
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405);
+
+  // Autenticação DENTRO da função: com verify_jwt = false no gateway (senão o
+  // preflight OPTIONS, que não carrega Authorization, seria barrado), validamos
+  // aqui o JWT do usuário interno.
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!jwt) return json({ error: 'unauthorized' }, 401);
+  const auth = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { data: userData, error: userErr } = await auth.auth.getUser(jwt);
+  if (userErr || !userData?.user) return json({ error: 'unauthorized' }, 401);
 
   let body: { empreendimentoId?: unknown; empreendimentoNome?: unknown };
   try {

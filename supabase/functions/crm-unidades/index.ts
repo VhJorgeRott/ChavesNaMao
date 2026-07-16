@@ -12,6 +12,7 @@
 // Deploy:
 //   supabase secrets set CRM_API_UNIDADES_BASE_URL=https://rottas.cvcrm.com.br/api/v1/comercial/mapadisponibilidade
 //   supabase functions deploy crm-unidades
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -68,6 +69,19 @@ function toArea(v: unknown): number {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // Autenticação DENTRO da função: com verify_jwt = false no gateway (senão o
+  // preflight OPTIONS, que não carrega Authorization, seria barrado), validamos
+  // aqui o JWT do usuário interno.
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!jwt) return json({ error: 'unauthorized' }, 401);
+  const auth = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { data: userData, error: userErr } = await auth.auth.getUser(jwt);
+  if (userErr || !userData?.user) return json({ error: 'unauthorized' }, 401);
 
   const baseUrl = Deno.env.get('CRM_API_UNIDADES_BASE_URL');
   const email = Deno.env.get('CRM_API_EMAIL');

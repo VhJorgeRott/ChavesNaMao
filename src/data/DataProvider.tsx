@@ -12,10 +12,15 @@ import { AdapterError } from '@/adapters/errors';
 import type { UnidadeErp } from '@/adapters/types';
 import { transicionar } from '@/domain/state-machine';
 import { type Cliente, type Documento, type Empreendimento, type EntregaStatus, TIPO_DOCUMENTO, type Unidade } from '@/domain/types';
-import { buildPortalUrl, generateToken, hashToken, timingSafeEqualHex } from '@/lib/token';
-import { env } from '@/lib/env';
+import type {
+  PortalAssinarResult,
+  PortalResolveResult,
+  PortalSnapshot,
+} from '@/adapters/types';
+import { hashToken } from '@/lib/token';
 import { logAtividade } from '@/lib/atividade';
 import { createInitialState, type DbState } from './seed';
+import { getEntregaDetalhe } from './selectors';
 
 let idCounter = 1000;
 function nextId(prefix: string): string {
@@ -23,9 +28,38 @@ function nextId(prefix: string): string {
   return `${prefix}-${idCounter.toString(36)}`;
 }
 
-export type PortalResultado =
-  | { ok: true; entregaId: string }
-  | { ok: false; motivo: 'invalido' | 'expirado' | 'usado' };
+/**
+ * Monta o snapshot da entrega para o portal (envio ao adapter). As `externalRef`
+ * são os ids atuais em memória (CV/Mega/mock) — o servidor faz upsert por elas.
+ * Retorna `null` se faltar unidade/empreendimento/cliente para o portal exibir.
+ */
+function montarSnapshot(state: DbState, entregaId: string): PortalSnapshot | null {
+  const det = getEntregaDetalhe(state, entregaId);
+  if (!det || !det.unidade || !det.empreendimento || !det.cliente) return null;
+  const { entrega, unidade, empreendimento, cliente } = det;
+  return {
+    entrega: { externalRef: entrega.id },
+    empreendimento: {
+      externalRef: empreendimento.id,
+      nome: empreendimento.nome,
+      cidade: empreendimento.cidade,
+      uf: empreendimento.uf,
+    },
+    unidade: {
+      externalRef: unidade.id,
+      identificacao: unidade.identificacao,
+      areaM2: unidade.areaM2,
+      status: unidade.status,
+    },
+    cliente: {
+      externalRef: cliente.id,
+      nome: cliente.nome,
+      cpf: cliente.cpf,
+      email: cliente.email,
+      telefone: cliente.telefone,
+    },
+  };
+}
 
 export interface DataActions {
   iniciarEntrega(unidadeId: string, responsavelId: string): Promise<string>;
@@ -43,12 +77,12 @@ export interface DataActions {
   gerarLinkAssinatura(entregaId: string, actorId: string): Promise<{ token: string; url: string }>;
   adicionarItem(entregaId: string, descricao: string, quantidade: number, actorId: string): void;
   removerItem(itemId: string): void;
-  resolverToken(token: string): Promise<PortalResultado>;
+  resolverToken(token: string): Promise<PortalResolveResult>;
   registrarAssinaturaPorToken(
     token: string,
     pngDataUrl: string,
     geo: { lat: number; lng: number } | null,
-  ): Promise<PortalResultado>;
+  ): Promise<PortalAssinarResult>;
   definirPapel(userId: string, papel: 'admin' | 'equipe_entrega', actorId: string): void;
   criarModelo(nome: string, conteudo: string, actorId: string): string;
   atualizarModelo(id: string, dados: { nome: string; conteudo: string }, actorId: string): void;
@@ -190,15 +224,15 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       const agora = new Date().toISOString();
       const novaEntrega = ativa === undefined;
       let entregaId: string;
-      let clienteId: string;
+      let cliente: Cliente;
       if (ativa) {
         entregaId = ativa.id;
-        clienteId = ativa.clienteId;
+        cliente = s0.clientes.find((c) => c.id === ativa.clienteId) ?? (await resolverCliente(unidadeId));
       } else {
-        const cliente = await resolverCliente(unidadeId);
+        cliente = await resolverCliente(unidadeId);
         entregaId = nextId('ent');
-        clienteId = cliente.id;
       }
+      const clienteId = cliente.id;
 
       // Gera o termo (documento) se ainda não existir para esta entrega.
       let doc: Documento | null = null;
@@ -214,10 +248,34 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
         };
       }
 
-      // Link de assinatura (uso único, 72h) — invalida tokens anteriores.
-      const { token, tokenHash } = await generateToken();
-      const url = buildPortalUrl(env.VITE_PUBLIC_APP_URL, token);
-      const expires = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+      // Link de assinatura durável: o adapter persiste o token no servidor (live)
+      // ou em memória (mock) e devolve o token em claro + a URL do portal.
+      const empreendimento = s0.empreendimentos.find((e) => e.id === unidade.empreendimentoId);
+      if (!empreendimento) {
+        throw new Error('Empreendimento da unidade não encontrado para gerar o link.');
+      }
+      const { url } = await adapters.portal.gerarLink({
+        entrega: { externalRef: entregaId },
+        empreendimento: {
+          externalRef: empreendimento.id,
+          nome: empreendimento.nome,
+          cidade: empreendimento.cidade,
+          uf: empreendimento.uf,
+        },
+        unidade: {
+          externalRef: unidade.id,
+          identificacao: unidade.identificacao,
+          areaM2: unidade.areaM2,
+          status: unidade.status,
+        },
+        cliente: {
+          externalRef: cliente.id,
+          nome: cliente.nome,
+          cpf: cliente.cpf,
+          email: cliente.email,
+          telefone: cliente.telefone,
+        },
+      });
 
       setState((s) => ({
         ...s,
@@ -237,18 +295,6 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
             ]
           : s.entregas.map((e) => (e.id === entregaId ? { ...e, status: 'ASSINATURA' } : e)),
         documentos: doc ? [...s.documentos, doc] : s.documentos,
-        tokens: [
-          ...s.tokens.filter((t) => t.entregaId !== entregaId),
-          {
-            id: nextId('tok'),
-            entregaId,
-            tokenHash,
-            expiresAt: expires,
-            usedAt: null,
-            scope: 'assinatura',
-            createdAt: agora,
-          },
-        ],
       }));
 
       if (novaEntrega) {
@@ -391,25 +437,11 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
 
   const gerarLinkAssinatura = useCallback(
     async (entregaId: string, actorId: string): Promise<{ token: string; url: string }> => {
-      const { token, tokenHash } = await generateToken();
-      const url = buildPortalUrl(env.VITE_PUBLIC_APP_URL, token);
-      const expires = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
-      setState((s) => ({
-        ...s,
-        // Invalida tokens anteriores da mesma entrega (escopo mínimo + uso único).
-        tokens: [
-          ...s.tokens.filter((t) => t.entregaId !== entregaId),
-          {
-            id: nextId('tok'),
-            entregaId,
-            tokenHash,
-            expiresAt: expires,
-            usedAt: null,
-            scope: 'assinatura',
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      }));
+      // O adapter persiste o token no servidor (live) ou em memória (mock) e
+      // devolve o token em claro + a URL do portal. Nada de token é gravado aqui.
+      const snapshot = montarSnapshot(stateRef.current, entregaId);
+      if (!snapshot) throw new Error('Dados da entrega incompletos para gerar o link.');
+      const { token, url } = await adapters.portal.gerarLink(snapshot);
       await adapters.notification.notificar({
         tipo: 'LINK_ASSINATURA_GERADO',
         para: 'cliente',
@@ -438,74 +470,36 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     setState((s) => ({ ...s, itens: s.itens.filter((i) => i.id !== itemId) }));
   }, []);
 
-  const resolverToken = useCallback(async (token: string): Promise<PortalResultado> => {
-    const hash = await hashToken(token);
-    const rec = stateRef.current.tokens.find((t) => timingSafeEqualHex(t.tokenHash, hash));
-    if (!rec) return { ok: false, motivo: 'invalido' };
-    if (rec.usedAt !== null) return { ok: false, motivo: 'usado' };
-    if (new Date(rec.expiresAt).getTime() <= Date.now()) return { ok: false, motivo: 'expirado' };
-    return { ok: true, entregaId: rec.entregaId };
-  }, []);
+  const resolverToken = useCallback(
+    (token: string): Promise<PortalResolveResult> => adapters.portal.resolver(token),
+    [],
+  );
 
   const registrarAssinaturaPorToken = useCallback(
     async (
       token: string,
       pngDataUrl: string,
       geo: { lat: number; lng: number } | null,
-    ): Promise<PortalResultado> => {
-      const resultado = await resolverToken(token);
-      if (!resultado.ok) return resultado;
-      const entregaId = resultado.entregaId;
-      const documento = stateRef.current.documentos.find((d) => d.entregaId === entregaId);
-
-      // Envia ao Clicksign via adapter (mock) para validade jurídica.
-      const ref = await adapters.signature.enviarParaAssinatura({
-        entregaId,
-        documentoId: documento?.id ?? 'sem-doc',
-        nomeArquivo: 'termo-entrega.pdf',
-        mimeType: 'application/pdf',
-        sha256Hash: documento?.sha256Hash ?? 'a'.repeat(64),
-        conteudoBase64: '',
-        signatario: { nome: 'Cliente', email: 'cliente@example.com', cpf: '00000000000' },
+    ): Promise<PortalAssinarResult> => {
+      // Registro da assinatura (upload do PNG em bucket privado, uso único do
+      // token e auditoria) acontece no servidor (live) ou em memória (mock) via
+      // adapter — o portal roda numa sessão anônima, sem o estado interno.
+      const r = await adapters.portal.registrarAssinatura({
+        token,
+        pngDataUrl,
+        geo,
+        userAgent: navigator.userAgent,
       });
-      const status = await adapters.signature.consultarStatus(ref);
-
-      const assinaturaId = nextId('ass');
-      const agora = new Date().toISOString();
-      setState((s) => ({
-        ...s,
-        assinaturas: [
-          ...s.assinaturas.filter((a) => a.entregaId !== entregaId),
-          {
-            id: assinaturaId,
-            entregaId,
-            documentoId: documento?.id ?? '',
-            canvasPngPath: pngDataUrl, // em produção: upload p/ bucket privado + signed URL
-            metodo: 'CLICKSIGN',
-            ip: null, // capturado no servidor (não confiar no cliente)
-            userAgent: navigator.userAgent,
-            geo,
-            assinadaEm: agora,
-            clicksignDocKey: ref.documentKey,
-            clicksignStatus: status.state,
-          },
-        ],
-        // Uso único: marca o token como usado.
-        tokens: s.tokens.map((t) =>
-          t.entregaId === entregaId && t.usedAt === null ? { ...t, usedAt: agora } : t,
-        ),
-      }));
-      pushAudit('cliente:token', 'ASSINATURA_REGISTRADA', 'entrega', entregaId, {
-        metodo: 'CLICKSIGN',
-      });
-      await adapters.notification.notificar({
-        tipo: 'ASSINATURA_CONCLUIDA',
-        para: 'equipe@rottas.com.br',
-        entregaId,
-      });
-      return { ok: true, entregaId };
+      if (r.ok) {
+        await adapters.notification.notificar({
+          tipo: 'ASSINATURA_CONCLUIDA',
+          para: 'equipe@rottas.com.br',
+          entregaId: r.entregaId,
+        });
+      }
+      return r;
     },
-    [resolverToken, pushAudit],
+    [],
   );
 
   const definirPapel = useCallback(
