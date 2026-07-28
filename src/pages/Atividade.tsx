@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { adapters, type AtividadeFiltro } from '@/adapters';
-import type { AppUser, AuditEntry } from '@/domain/types';
-import { PAPEL_META } from '@/domain/status';
+import type { AppUser, AuditEntry } from '@chaves/domain/types';
+import { PAPEL_META } from '@chaves/domain/status';
 import {
   descreverAtividade,
   metaDaAtividade,
   TIPO_ATIVIDADE_META,
   type TipoAtividade,
-} from '@/domain/atividade';
+} from '@chaves/domain/atividade';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fDataHora } from '@/lib/format';
+import { fDataHora } from '@chaves/domain/format';
 
 const TODOS = '__todos__';
 const TIPOS: TipoAtividade[] = ['login', 'navegacao', 'acao'];

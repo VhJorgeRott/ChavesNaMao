@@ -2,8 +2,8 @@ import { Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { useData } from '@/data/DataProvider';
 import { useSession } from '@/auth/SessionProvider';
-import { PAPEL, type Papel } from '@/domain/types';
-import { PAPEL_META } from '@/domain/status';
+import { PAPEL, type Papel } from '@chaves/domain/types';
+import { PAPEL_META } from '@chaves/domain/status';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fDataHora } from '@/lib/format';
+import { fDataHora } from '@chaves/domain/format';
 
 export function Admin(): React.JSX.Element {
   const { state, actions } = useData();

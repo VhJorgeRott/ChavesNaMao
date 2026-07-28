@@ -4,7 +4,7 @@
  * sintéticos (não pertencem a pessoas reais).
  */
 
-import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
+import type { Cliente, Empreendimento, Unidade } from '@chaves/domain/types';
 import type { SituacaoFinanceira } from './types';
 
 /** Completa um prefixo de 9 dígitos com os 2 verificadores, gerando CPF válido. */

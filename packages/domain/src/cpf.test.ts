@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCpf, isValidCpf, onlyDigits } from './cpf';
+import { formatCpf, isValidCpf, onlyDigits } from './cpf.js';
 
 describe('isValidCpf', () => {
   it('aceita CPFs válidos (com e sem máscara)', () => {

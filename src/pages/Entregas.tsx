@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { PackageCheck } from 'lucide-react';
 import { useData } from '@/data/DataProvider';
 import { listarEntregas } from '@/data/selectors';
-import { ENTREGA_STATUS } from '@/domain/types';
-import { ENTREGA_STATUS_META } from '@/domain/status';
+import { ENTREGA_STATUS } from '@chaves/domain/types';
+import { ENTREGA_STATUS_META } from '@chaves/domain/status';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { EntregaStatusBadge } from '@/components/shared/StatusBadge';
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fData } from '@/lib/format';
+import { fData } from '@chaves/domain/format';
 
 const TODOS = '__todos__';
 

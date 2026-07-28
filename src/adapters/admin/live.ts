@@ -1,5 +1,5 @@
-import type { AppUser } from '@/domain/types';
-import { ACAO_NAVEGACAO, ACOES_LOGIN } from '@/domain/atividade';
+import type { AppUser } from '@chaves/domain/types';
+import { ACAO_NAVEGACAO, ACOES_LOGIN } from '@chaves/domain/atividade';
 import type { AdminAdapter, AtividadeFiltro, AtividadePagina } from '../types';
 import { AdapterError } from '../errors';
 import { adminUsuarioRowSchema, auditLogRowSchema } from '../schemas';

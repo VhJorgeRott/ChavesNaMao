@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SituacaoFinanceira } from '@/adapters/types';
-import { renderTermo, variaveisInvalidas, type TermoContexto } from './termo';
-import type { Cliente, Empreendimento, Unidade } from './types';
+import { renderTermo, variaveisInvalidas, type TermoContexto } from './termo.js';
+import type { Cliente, Empreendimento, Unidade } from './types.js';
 
 const cliente: Cliente = {
   id: 'cli-1',

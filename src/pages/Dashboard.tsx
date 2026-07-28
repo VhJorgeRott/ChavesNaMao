@@ -7,8 +7,8 @@ import {
   ENTREGA_STATUS,
   UNIDADE_STATUS_LIBERADO_PARA_ENTREGA,
   UNIDADE_STATUS_VISIVEIS,
-} from '@/domain/types';
-import { ENTREGA_STATUS_META, UNIDADE_STATUS_META } from '@/domain/status';
+} from '@chaves/domain/types';
+import { ENTREGA_STATUS_META, UNIDADE_STATUS_META } from '@chaves/domain/status';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import {

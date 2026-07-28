@@ -2,14 +2,19 @@
 
 Plataforma interna da Rottas para **entrega de chaves** de unidades, ponta a ponta:
 modela uma máquina de estados de 6 etapas
-(`ABERTURA → INTEGRACAO → DOCUMENTOS → ASSINATURA → REGISTRO → CONCLUIDA`),
+(`ABERTURA → DOCUMENTOS → CONFISSAO → ASSINATURA → REGISTRO → CONCLUIDA`),
 unificando CRM (CV CRM), ERP (Mega) e assinatura digital (Clicksign) atrás de adapters.
 
 > **Status:** fundação + telas do MVP. Scaffold, schema/RLS, adapters e a **UI
 > completa** (Início, Unidades, Entregas, Detalhe da entrega e Portal do cliente
 > com canvas de assinatura) já rodam sobre um store em memória com dados mock.
-> Pendentes: auth real (Entra/MSAL ↔ Supabase), persistência no Supabase, geração
-> de PDF no servidor, Clicksign live, notificações e integrações live de CRM/ERP.
+> O checkpoint da entrega (etapa, documentos e itens) é gravado no Supabase e
+> recarregado no login, então uma entrega iniciada e não concluída sobrevive ao
+> refresh — ver `src/data/persistencia.ts`. O catálogo (empreendimentos e
+> unidades) fica em cache no navegador e é varrido em segundo plano após o login,
+> de modo que as telas abrem sem esperar CV/Mega e o dashboard já conta os
+> números reais — ver `src/data/cache.ts`. Pendentes: geração de PDF no servidor,
+> Clicksign live e notificações.
 
 ## Telas
 
@@ -20,7 +25,12 @@ App interno (shell com sidebar, fundo cinza, tokens da Rottas):
 - **Entregas** (`/entregas`) — lista filtrável; clique abre o detalhe.
 - **Detalhe da entrega** (`/entregas/:id`) — timeline das 6 etapas, ação contextual por etapa
   (validada pela máquina de estados), documentos + hash, geração de link de assinatura, itens e
-  trilha de auditoria.
+  trilha de auditoria. Os dados de contato do cliente são puxados das integrações (CRM/ERP)
+  automaticamente ao abrir a tela — não há etapa manual de integração.
+  São **duas assinaturas, nesta ordem**: a Confissão de Dívida, assinada remotamente pelo cliente
+  (Clicksign), e só depois o Recebimento de Chaves, assinado presencialmente no dia da entrega, no
+  dispositivo de quem atende. Enquanto a Clicksign live não existe, a etapa de confissão aceita
+  confirmação manual da equipe, registrada como tal na auditoria.
 - **Usuários** (`/admin`) — gestão de papéis (RBAC); visível só para `admin`.
 
 Portal do cliente (rota pública, sem login):

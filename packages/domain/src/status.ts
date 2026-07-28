@@ -1,4 +1,4 @@
-import type { EntregaStatus, Papel, UnidadeStatus } from './types';
+import type { EntregaStatus, Papel, UnidadeStatus } from './types.js';
 
 /**
  * Metadados de apresentação dos status de domínio: rótulo legível + cor.
@@ -13,9 +13,9 @@ export interface StatusMeta {
 
 export const ENTREGA_STATUS_META: Record<EntregaStatus, StatusMeta> = {
   ABERTURA: { label: 'Abertura', color: '#64748b' },
-  INTEGRACAO: { label: 'Integração', color: '#3b82f6' },
   DOCUMENTOS: { label: 'Documentos', color: '#8b5cf6' },
-  ASSINATURA: { label: 'Assinatura', color: '#f59e0b' },
+  CONFISSAO: { label: 'Confissão de dívida', color: '#3b82f6' },
+  ASSINATURA: { label: 'Assinatura na entrega', color: '#f59e0b' },
   REGISTRO: { label: 'Registro', color: '#0ea5e9' },
   CONCLUIDA: { label: 'Concluída', color: '#22c55e' },
 };

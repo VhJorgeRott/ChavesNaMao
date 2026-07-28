@@ -1,0 +1,28 @@
+{
+  "name": "@chaves/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domínio compartilhado entre o app web e a API: tipos, máquina de estados, validação de signatário e renderização de termos. Fonte única — não duplicar em nenhum dos lados.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "//": "O web consome os .ts direto (alias do Vite, HMR imediato). A API é Node e consome o dist compilado — daí o build. Por isso cada entrada aponta para dist aqui.",
+  "exports": {
+    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.js" },
+    "./state-machine": {
+      "types": "./dist/state-machine.d.ts",
+      "default": "./dist/state-machine.js"
+    },
+    "./status": { "types": "./dist/status.d.ts", "default": "./dist/status.js" },
+    "./termo": { "types": "./dist/termo.d.ts", "default": "./dist/termo.js" },
+    "./signatario": { "types": "./dist/signatario.d.ts", "default": "./dist/signatario.js" },
+    "./atividade": { "types": "./dist/atividade.d.ts", "default": "./dist/atividade.js" },
+    "./cpf": { "types": "./dist/cpf.d.ts", "default": "./dist/cpf.js" },
+    "./format": { "types": "./dist/format.d.ts", "default": "./dist/format.js" }
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

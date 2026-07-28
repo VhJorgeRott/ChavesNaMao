@@ -49,3 +49,21 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Coordenadas do dispositivo, com consentimento explícito de quem assina.
+ *
+ * Resolve `null` em qualquer recusa, indisponibilidade ou timeout: a localização
+ * é um reforço de evidência da assinatura, nunca um requisito — a assinatura não
+ * pode falhar porque o GPS não respondeu.
+ */
+export function pedirGeolocalizacao(): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator)) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => resolve(null),
+      { timeout: 8000 },
+    );
+  });
+}

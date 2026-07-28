@@ -75,4 +75,9 @@ export class MockPortalAdapter implements PortalAdapter {
     reg.usedAt = Date.now(); // uso único
     return { ok: true, entregaId: reg.entregaId };
   }
+
+  /** Sem storage no mock: nada a servir, e a tela cai para a renderização local. */
+  async urlArquivo(): Promise<string | null> {
+    return null;
+  }
 }

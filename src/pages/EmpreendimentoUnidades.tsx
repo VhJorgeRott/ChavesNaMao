@@ -14,16 +14,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { adapters } from '@/adapters';
 import { useData } from '@/data/DataProvider';
 import { listarUnidades, type UnidadeResumo } from '@/data/selectors';
 import { useSession } from '@/auth/SessionProvider';
-import {
-  UNIDADE_STATUS_VISIVEIS,
-  type Empreendimento,
-  type Unidade,
-} from '@/domain/types';
-import { UNIDADE_STATUS_META } from '@/domain/status';
+import { UNIDADE_STATUS_VISIVEIS, type Empreendimento } from '@chaves/domain/types';
+import { UNIDADE_STATUS_META } from '@chaves/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { InadimplenciaBadge, UnidadeStatusBadge } from '@/components/shared/StatusBadge';
@@ -41,7 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fArea } from '@/lib/format';
+import { fArea } from '@chaves/domain/format';
 import { cn } from '@/lib/utils';
 
 const TODOS = '__todos__';
@@ -88,8 +83,11 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const { currentUser } = useSession();
   const navigate = useNavigate();
 
-  const [empreendimento, setEmpreendimento] = useState<Empreendimento | undefined>();
-  const [carregandoEmp, setCarregandoEmp] = useState(true);
+  // O empreendimento sai do cache quando já conhecido: nesse caso a tela pinta
+  // na hora e a revalidação corre por baixo, sem spinner.
+  const doCache = state.empreendimentos.find((e) => e.id === empreendimentoId);
+  const [empreendimento, setEmpreendimento] = useState<Empreendimento | undefined>(doCache);
+  const [carregandoEmp, setCarregandoEmp] = useState(doCache === undefined);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<string>(TODOS);
   const [inadimplenciaFiltro, setInadimplenciaFiltro] = useState<string>(TODOS);
@@ -98,21 +96,21 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const [detalhe, setDetalhe] = useState<UnidadeResumo | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [enviandoMassa, setEnviandoMassa] = useState(false);
-  const [infoIntegracao, setInfoIntegracao] = useState<
-    Record<string, { cliente?: string; contrato?: string; inadimplente?: boolean }>
-  >({});
-  const [carregandoInfo, setCarregandoInfo] = useState(true);
+  // Só há espera de verdade na primeira vez: com unidades em cache a tabela já
+  // aparece, e `garantirUnidades` decide sozinho se precisa revalidar.
+  const temUnidadesEmCache = state.unidades.some((u) => u.empreendimentoId === empreendimentoId);
+  const [carregandoInfo, setCarregandoInfo] = useState(!temUnidadesEmCache);
 
-  // Resolve o empreendimento pelo adapter (CRM no live, mock caso contrário).
+  // Resolve o empreendimento. `garantirEmpreendimentos` serve do cache quando
+  // recente, então revisitar a tela não paga uma ida ao CRM.
+  const { garantirEmpreendimentos, garantirUnidades } = actions;
   useEffect(() => {
     let ativo = true;
-    void adapters.crm
-      .getEmpreendimentos()
+    void garantirEmpreendimentos()
       .then((lista) => {
         if (!ativo) return;
         const found = lista.find((e) => e.id === empreendimentoId);
         setEmpreendimento(found);
-        if (found) actions.sincronizarEmpreendimentos([found]);
         setCarregandoEmp(false);
         if (!found) navigate('/unidades', { replace: true });
       })
@@ -125,63 +123,42 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     return () => {
       ativo = false;
     };
-  }, [empreendimentoId, navigate]);
+  }, [empreendimentoId, navigate, garantirEmpreendimentos]);
 
-  // Carrega as unidades do empreendimento no ERP (Mega, cruzando pelo nome) e as
-  // sincroniza no estado local, preservando o ciclo de entrega controlado no app.
-  // O mesmo payload já traz contrato/cliente por unidade — sem chamadas extras.
+  // Catálogo de unidades. A busca em si (Mega + área do CV) vive no
+  // DataProvider, compartilhada com o prefetch pós-login — aqui só reagimos.
   useEffect(() => {
     let ativo = true;
     if (!empreendimento) return;
-    setCarregandoInfo(true);
-    // A view de parcelas do Mega não traz área; a área vem do CV. Buscamos as
-    // unidades do CV em paralelo e mesclamos a área pelo número da unidade
-    // (último segmento da identificação, normalizado). Best-effort: sem match, a
-    // área permanece nula (sem regressão).
-    const chaveArea = (ident: string): string =>
-      (ident.split('·').pop() ?? '').replace(/\s+/g, '').toUpperCase();
-    void Promise.all([
-      adapters.erp.getUnidadesByEmpreendimento(empreendimento.id, empreendimento.nome),
-      adapters.crm.getUnidadesByEmpreendimento(empreendimento.id).catch(() => [] as Unidade[]),
-    ])
-      .then(([lista, cvUnidades]) => {
-        if (!ativo) return;
-        const areaPorChave = new Map<string, number>();
-        for (const u of cvUnidades) {
-          if (u.areaM2 != null && u.areaM2 > 0) areaPorChave.set(chaveArea(u.identificacao), u.areaM2);
-        }
-        const enriquecida = lista.map((u) =>
-          u.areaM2 == null
-            ? { ...u, areaM2: areaPorChave.get(chaveArea(u.identificacao)) ?? null }
-            : u,
-        );
-        actions.sincronizarUnidades(empreendimento.id, enriquecida);
-        setInfoIntegracao(
-          Object.fromEntries(
-            lista.map((u) => {
-              const info: { cliente?: string; contrato?: string; inadimplente?: boolean } = {};
-              if (u.clienteNome) info.cliente = u.clienteNome;
-              if (u.contratoNumero) info.contrato = u.contratoNumero;
-              if (u.inadimplente !== undefined) info.inadimplente = u.inadimplente;
-              return [u.id, info] as const;
-            }),
-          ),
-        );
-        setCarregandoInfo(false);
-        if (lista.length === 0) {
-          toast.warning('Nenhuma unidade encontrada no Mega para este empreendimento');
-        }
+    garantirUnidades(empreendimento)
+      .then(() => {
+        if (ativo) setCarregandoInfo(false);
       })
-      .catch((e) => {
-        if (ativo) {
-          setCarregandoInfo(false);
-          toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do ERP (Mega)');
-        }
+      .catch((e: unknown) => {
+        if (!ativo) return;
+        setCarregandoInfo(false);
+        toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do ERP (Mega)');
       });
     return () => {
       ativo = false;
     };
-  }, [empreendimento, actions]);
+  }, [empreendimento, garantirUnidades]);
+
+  // Os extras do Mega (cliente, contrato, inadimplência) agora viajam na própria
+  // unidade, então sobrevivem ao cache em vez de morrer com o estado da tela.
+  const infoIntegracao = useMemo(() => {
+    const mapa: Record<string, { cliente?: string; contrato?: string; inadimplente?: boolean }> =
+      {};
+    for (const u of state.unidades) {
+      if (u.empreendimentoId !== empreendimentoId) continue;
+      const info: { cliente?: string; contrato?: string; inadimplente?: boolean } = {};
+      if (u.clienteNome) info.cliente = u.clienteNome;
+      if (u.contratoNumero) info.contrato = u.contratoNumero;
+      if (u.inadimplente !== undefined) info.inadimplente = u.inadimplente;
+      mapa[u.id] = info;
+    }
+    return mapa;
+  }, [state.unidades, empreendimentoId]);
 
   // Unidades do empreendimento, apenas com status visíveis.
   const unidades = useMemo(

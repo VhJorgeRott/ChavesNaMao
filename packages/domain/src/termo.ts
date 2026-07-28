@@ -1,7 +1,7 @@
-import type { SituacaoFinanceira } from '@/adapters/types';
-import { formatCpf } from '@/lib/cpf';
-import { fArea, fData, fMoeda } from '@/lib/format';
-import type { Cliente, Empreendimento, Unidade } from './types';
+
+import { formatCpf } from './cpf.js';
+import { fArea, fData, fMoeda } from './format.js';
+import type { Cliente, Empreendimento, SituacaoFinanceira, Unidade } from './types.js';
 
 /**
  * Motor de variáveis dos modelos de termo. As variáveis usam o formato
@@ -190,4 +190,22 @@ export function variaveisInvalidas(conteudo: string): string[] {
     if (!RESOLVERS[chave]) invalidas.add(chave);
   }
   return [...invalidas];
+}
+
+/**
+ * Variáveis do template que ficariam VAZIAS com este contexto.
+ *
+ * Diferente de `variaveisInvalidas`, que acusa erro de digitação: aqui a
+ * variável existe, mas não há dado para ela. É o que permite recusar o envio de
+ * uma confissão de dívida sem o valor da dívida — um documento com validade
+ * jurídica e a cláusula principal em branco é pior do que documento nenhum.
+ */
+export function variaveisVazias(conteudo: string, ctx: TermoContexto): string[] {
+  const vazias = new Set<string>();
+  for (const m of conteudo.matchAll(VAR_REGEX)) {
+    const chave = m[1]!;
+    const resolver = RESOLVERS[chave];
+    if (resolver && resolver(ctx).trim() === '') vazias.add(chave);
+  }
+  return [...vazias];
 }

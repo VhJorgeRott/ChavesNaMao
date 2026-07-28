@@ -163,24 +163,49 @@ Deno.serve(async (req) => {
       .single();
     if (cliErr) throw cliErr;
 
-    // 4) Entrega (upsert por external_ref). Inserida direto em ASSINATURA (o
-    //    trigger de transição só age em UPDATE de status, não em INSERT).
-    const { data: ent, error: entErr } = await admin
+    // 4) Entrega.
+    //
+    // O status NÃO é tocado quando a entrega já existe. Gerar um link de
+    // assinatura não é avançar etapa — e desde que a confissão de dívida virou
+    // etapa própria, forçar 'ASSINATURA' aqui violava o guard de transição
+    // (DOCUMENTOS → ASSINATURA deixou de ser válido), derrubando a geração do
+    // link com um erro que chegava à tela como "Falha ao gerar o link".
+    //
+    // Em INSERT o status vem do app (o snapshot carrega a etapa em que a
+    // entrega está); sem ele, o default da coluna vale.
+    const { data: entExistente } = await admin
       .from('entregas')
-      .upsert(
-        {
+      .select('id')
+      .eq('external_ref', entRef)
+      .maybeSingle();
+
+    let ent: { id: string };
+    if (entExistente) {
+      const { data, error } = await admin
+        .from('entregas')
+        .update({ unidade_id: uni.id, cliente_id: cli.id })
+        .eq('external_ref', entRef)
+        .select('id')
+        .single();
+      if (error) throw error;
+      ent = data;
+    } else {
+      const statusInicial = typeof snap.entrega?.status === 'string' ? snap.entrega.status : null;
+      const { data, error } = await admin
+        .from('entregas')
+        .insert({
           external_ref: entRef,
           unidade_id: uni.id,
           cliente_id: cli.id,
           responsavel_id: userId,
-          status: 'ASSINATURA',
+          ...(statusInicial ? { status: statusInicial } : {}),
           iniciada_em: new Date().toISOString(),
-        },
-        { onConflict: 'external_ref' },
-      )
-      .select('id')
-      .single();
-    if (entErr) throw entErr;
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      ent = data;
+    }
 
     // 5) Documento (Confissão de Dívida) — garante um registro para a assinatura.
     const { data: docExistente } = await admin

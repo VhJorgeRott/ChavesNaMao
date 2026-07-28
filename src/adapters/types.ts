@@ -8,8 +8,8 @@
  * usuário. Segredos (API tokens) ficam no servidor, nunca no bundle.
  */
 
-import type { AppUser, AuditEntry, Cliente, Empreendimento, Unidade } from '@/domain/types';
-import type { TipoAtividade } from '@/domain/atividade';
+import type { AppUser, AuditEntry, Cliente, Empreendimento, Unidade } from '@chaves/domain/types';
+import type { TipoAtividade } from '@chaves/domain/atividade';
 
 // ---------------------------------------------------------------------------
 // CRM (CV CRM) — cadastro de empreendimentos, unidades e dados do cliente
@@ -32,16 +32,10 @@ export interface CrmAdapter {
 // ---------------------------------------------------------------------------
 // ERP (Mega) — situação financeira da unidade
 // ---------------------------------------------------------------------------
-export interface SituacaoFinanceira {
-  unidadeId: string;
-  /** ID/nº do contrato como registrado no ERP (Mega). */
-  numeroContrato: string;
-  quitada: boolean;
-  valorContrato: number;
-  saldoDevedor: number;
-  parcelasEmAberto: number;
-  moeda: 'BRL';
-}
+// `SituacaoFinanceira` mora no domínio (o termo de confissão depende dela) e é
+// reexportada aqui para não quebrar quem já a importava dos adapters.
+import type { SituacaoFinanceira } from '@chaves/domain/types';
+export type { SituacaoFinanceira };
 
 /** Unidade vinda do ERP com dados agregados de contrato/cliente (evita N chamadas por unidade). */
 export type UnidadeErp = Unidade & {
@@ -116,7 +110,12 @@ export interface SignatureAdapter {
 
 /** Dados enviados ao gerar o link: chaves externas (CV/Mega/mock) + exibição. */
 export interface PortalSnapshot {
-  entrega: { externalRef: string };
+  /**
+   * `status` só é usado quando o servidor ainda não conhece a entrega: é a etapa
+   * com que ela nasce lá. Numa entrega já existente o servidor ignora o campo —
+   * gerar link não avança etapa, e a máquina de estados é a única a fazer isso.
+   */
+  entrega: { externalRef: string; status?: string };
   empreendimento: { externalRef: string; nome: string; cidade: string; uf: string };
   unidade: { externalRef: string; identificacao: string; areaM2: number | null; status: string };
   cliente: {
@@ -154,6 +153,12 @@ export interface PortalAdapter {
   resolver(token: string): Promise<PortalResolveResult>;
   /** Registra a assinatura (uso único do token). */
   registrarAssinatura(input: PortalAssinarInput): Promise<PortalAssinarResult>;
+  /**
+   * URL temporária para um arquivo privado da entrega: `'assinatura'` para o
+   * traço do canvas, ou o tipo do documento para o PDF do termo. Devolve `null`
+   * quando o arquivo ainda não existe — caso comum enquanto o PDF não é gerado.
+   */
+  urlArquivo(entregaId: string, alvo: string): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------

@@ -16,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { fData } from '@/lib/format';
-import type { ModeloTermo } from '@/domain/types';
+import { fData } from '@chaves/domain/format';
+import type { ModeloTermo } from '@chaves/domain/types';
 
 export function Modelos(): React.JSX.Element {
   const { state, actions } = useData();

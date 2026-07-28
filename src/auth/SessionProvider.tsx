@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useData } from '@/data/DataProvider';
-import type { AppUser } from '@/domain/types';
+import type { AppUser } from '@chaves/domain/types';
 import { logAtividade } from '@/lib/atividade';
 import { isAuthConfigured } from './authConfig';
 import {

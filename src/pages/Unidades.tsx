@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, TriangleAlert } from 'lucide-react';
-import { adapters } from '@/adapters';
 import { useData } from '@/data/DataProvider';
-import { UNIDADE_STATUS_VISIVEIS, type Empreendimento, type UnidadeStatus } from '@/domain/types';
-import { UNIDADE_STATUS_META } from '@/domain/status';
+import { UNIDADE_STATUS_VISIVEIS, type Empreendimento } from '@chaves/domain/types';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -12,39 +10,27 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-function StatPill({ status, value }: { status: UnidadeStatus; value: number }): React.JSX.Element {
-  const meta = UNIDADE_STATUS_META[status];
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-      style={{ backgroundColor: `${meta.color}26`, color: meta.color }}
-    >
-      <span className="tabular-nums">{value}</span> {meta.label.toLowerCase()}
-    </span>
-  );
-}
-
 export function Unidades(): React.JSX.Element {
   const { state, actions } = useData();
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
 
-  const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  // Parte do que já está em cache: revisitar a tela não mostra esqueleto nem
+  // espera a rede. `garantirEmpreendimentos` só vai ao CRM se o cache envelheceu.
+  const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>(state.empreendimentos);
+  const [carregando, setCarregando] = useState(state.empreendimentos.length === 0);
   const [erro, setErro] = useState<string | null>(null);
 
+  const { garantirEmpreendimentos } = actions;
   useEffect(() => {
     let ativo = true;
-    setCarregando(true);
-    adapters.crm
-      .getEmpreendimentos()
+    garantirEmpreendimentos()
       .then((lista) => {
         if (!ativo) return;
         setEmpreendimentos(lista);
-        actions.sincronizarEmpreendimentos(lista);
         setErro(null);
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar empreendimentos');
       })
       .finally(() => {
@@ -53,7 +39,7 @@ export function Unidades(): React.JSX.Element {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [garantirEmpreendimentos]);
 
   const cards = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -62,13 +48,7 @@ export function Unidades(): React.JSX.Element {
         const unidades = state.unidades.filter(
           (u) => u.empreendimentoId === emp.id && UNIDADE_STATUS_VISIVEIS.includes(u.status),
         );
-        return {
-          emp,
-          total: unidades.length,
-          emObras: unidades.filter((u) => u.status === 'EM_OBRAS').length,
-          liberadas: unidades.filter((u) => u.status === 'LIBERADA').length,
-          entregues: unidades.filter((u) => u.status === 'ENTREGUE').length,
-        };
+        return { emp, total: unidades.length };
       })
       .filter(({ emp }) => !q || `${emp.nome} ${emp.cidade} ${emp.uf}`.toLowerCase().includes(q));
   }, [empreendimentos, state.unidades, busca]);
@@ -113,10 +93,12 @@ export function Unidades(): React.JSX.Element {
           />
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {cards.map(({ emp, total, emObras, liberadas, entregues }) => {
-              const disponiveis = emp.unidadesDisponiveis;
+            {cards.map(({ emp, total }) => {
               return (
                 <Card key={emp.id} className="flex flex-col overflow-hidden">
+                  {/* O card é só identificação e porta de entrada. A contagem
+                      por status foi retirada daqui: ela vive na tela do
+                      empreendimento, onde há contexto para agir sobre ela. */}
                   <div className="relative h-32">
                     {emp.foto ? (
                       <img
@@ -130,11 +112,6 @@ export function Unidades(): React.JSX.Element {
                         <Building2 className="h-14 w-14 text-primary-foreground/30" />
                       </div>
                     )}
-                    <div className="absolute bottom-2 right-2 rounded-full bg-black/40 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-                      {disponiveis != null
-                        ? `${disponiveis} disponível(is)`
-                        : `${liberadas} liberada(s)`}
-                    </div>
                   </div>
                   <CardContent className="flex flex-1 flex-col gap-3 p-4">
                     <div>
@@ -146,13 +123,6 @@ export function Unidades(): React.JSX.Element {
                         {emp.situacaoObra ? ` · ${emp.situacaoObra}` : ''}
                       </p>
                     </div>
-                    {total > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <StatPill status="EM_OBRAS" value={emObras} />
-                        <StatPill status="LIBERADA" value={liberadas} />
-                        <StatPill status="ENTREGUE" value={entregues} />
-                      </div>
-                    )}
                     <Button
                       className="mt-auto w-full"
                       onClick={() => navigate(`/unidades/${emp.id}`)}

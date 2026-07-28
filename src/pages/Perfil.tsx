@@ -10,8 +10,8 @@ import {
 import { toast } from 'sonner';
 import { useAuth, useSession } from '@/auth/SessionProvider';
 import { deleteAccountRemote } from '@/auth/deleteAccount';
-import { PAPEL_META } from '@/domain/status';
-import { fData } from '@/lib/format';
+import { PAPEL_META } from '@chaves/domain/status';
+import { fData } from '@chaves/domain/format';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';

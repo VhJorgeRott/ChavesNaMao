@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@chaves/domain': fileURLToPath(new URL('./packages/domain/src', import.meta.url)),
     },
   },
   server: {
@@ -23,7 +24,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.{test,spec}.ts'],
+    include: ['src/**/*.{test,spec}.ts', 'packages/*/src/**/*.{test,spec}.ts'],
     globals: true,
     // Valores de ambiente fictícios para os testes (apenas chaves públicas VITE_*).
     env: {

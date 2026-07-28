@@ -12,6 +12,7 @@ import {
   empreendimentos as mockEmpreendimentos,
   unidades as mockUnidades,
 } from '@/adapters/mock-data';
+import { env } from '@/lib/env';
 import type {
   AccessTokenRec,
   AppUser,
@@ -24,11 +25,17 @@ import type {
   ModeloTermo,
   Unidade,
   AuditEntry,
-} from '@/domain/types';
+} from '@chaves/domain/types';
 
 export interface DbState {
   empreendimentos: Empreendimento[];
   unidades: Unidade[];
+  /**
+   * ISO da última sincronização do catálogo com CV/Mega, por empreendimento.
+   * É o que permite servir a listagem do cache e só revalidar quando envelhece
+   * (ver `garantirUnidades` no DataProvider).
+   */
+  sincronizadoEm: Record<string, string>;
   clientes: Cliente[];
   entregas: Entrega[];
   itens: ItemEntrega[];
@@ -184,7 +191,49 @@ const USUARIO_EQUIPE: AppUser = {
   criadoEm: '2026-01-15T14:30:00Z',
 };
 
+/**
+ * Há alguma integração em `live`?
+ *
+ * Com qualquer integração real ligada, o catálogo de demonstração NÃO pode
+ * entrar no estado: ele apareceria misturado aos empreendimentos reais na tela
+ * de Unidades e contaminaria a contagem do dashboard. Foi exatamente o que
+ * aconteceu — "Residencial Jardim das Acácias" e "Loteamento Terras do Lago"
+ * convivendo com os empreendimentos do CV.
+ */
+function algumaIntegracaoLive(): boolean {
+  return (
+    env.VITE_ADAPTER_MODE === 'live' ||
+    env.VITE_CRM_MODE === 'live' ||
+    env.VITE_ERP_MODE === 'live' ||
+    env.VITE_ADMIN_MODE === 'live' ||
+    env.VITE_PORTAL_MODE === 'live'
+  );
+}
+
+/** Estado sem nenhum dado de demonstração — o que vale quando há integração real. */
+function estadoVazio(): DbState {
+  return {
+    empreendimentos: [],
+    unidades: [],
+    sincronizadoEm: {},
+    clientes: [],
+    entregas: [],
+    itens: [],
+    documentos: [],
+    assinaturas: [],
+    tokens: [],
+    auditoria: [],
+    // Usuários e modelos continuam: o seletor de usuário de desenvolvimento e o
+    // editor de termos precisam de algo enquanto o servidor não responde. Ambos
+    // são substituídos pelos dados reais assim que carregam.
+    usuarios: [USUARIO_ADMIN, USUARIO_EQUIPE],
+    modelos: [],
+  };
+}
+
 export function createInitialState(): DbState {
+  if (algumaIntegracaoLive()) return estadoVazio();
+
   // Cópias para não mutar os arrays dos adapters mock.
   const unidades: Unidade[] = mockUnidades.map((u) => ({ ...u }));
 
@@ -252,19 +301,34 @@ export function createInitialState(): DbState {
     },
   ];
 
+  // A entrega concluída tem as DUAS assinaturas do processo: a confissão de
+  // dívida (remota, Clicksign) e o recebimento de chaves (presencial, canvas).
   const assinaturas: Assinatura[] = [
     {
-      id: 'ass-0003',
+      id: 'ass-0003-confissao',
       entregaId: 'ent-0003',
       documentoId: 'doc-0003',
-      canvasPngPath: 'entregas/ent-0003/assinatura.png',
+      canvasPngPath: null,
       metodo: 'CLICKSIGN',
       ip: '187.45.xxx.xxx',
       userAgent: 'Mozilla/5.0',
       geo: null,
-      assinadaEm: '2026-06-04T15:20:00Z',
+      assinadaEm: '2026-06-02T10:15:00Z',
       clicksignDocKey: 'mock-doc-0003-abc',
       clicksignStatus: 'signed',
+    },
+    {
+      id: 'ass-0003-recebimento',
+      entregaId: 'ent-0003',
+      documentoId: 'doc-0003',
+      canvasPngPath: 'entregas/ent-0003/assinatura.png',
+      metodo: 'CANVAS',
+      ip: '187.45.xxx.xxx',
+      userAgent: 'Mozilla/5.0',
+      geo: null,
+      assinadaEm: '2026-06-04T15:20:00Z',
+      clicksignDocKey: null,
+      clicksignStatus: null,
     },
   ];
 
@@ -328,6 +392,7 @@ export function createInitialState(): DbState {
   return {
     empreendimentos: mockEmpreendimentos.map((e) => ({ ...e })),
     unidades,
+    sincronizadoEm: {},
     clientes: mockClientes.map((c) => ({ ...c })),
     entregas,
     itens,

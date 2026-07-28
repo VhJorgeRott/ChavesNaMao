@@ -11,8 +11,8 @@ import {
   renderTermo,
   variaveisInvalidas,
   type TermoContexto,
-} from '@/domain/termo';
-import type { Cliente } from '@/domain/types';
+} from '@chaves/domain/termo';
+import type { Cliente } from '@chaves/domain/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -48,6 +48,7 @@ export function ModeloEditor(): React.JSX.Element {
     () => state.unidades[0]?.id ?? '',
   );
   const [ctx, setCtx] = useState<TermoContexto>({});
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -101,15 +102,26 @@ export function ModeloEditor(): React.JSX.Element {
     });
   }
 
-  function salvar() {
+  async function salvar() {
     if (!nome.trim() || !conteudo.trim()) {
       toast.error('Informe o nome e o conteúdo do modelo');
       return;
     }
-    if (ehNovo) actions.criarModelo(nome.trim(), conteudo, currentUser.id);
-    else actions.atualizarModelo(id, { nome: nome.trim(), conteudo }, currentUser.id);
-    toast.success('Modelo salvo');
-    navigate('/modelos');
+    setSalvando(true);
+    try {
+      // Só navega depois de o servidor confirmar: este é o texto que o cliente
+      // assina, então "salvo" não pode ser só na tela de quem editou.
+      if (ehNovo) await actions.criarModelo(nome.trim(), conteudo, currentUser.id);
+      else await actions.atualizarModelo(id, { nome: nome.trim(), conteudo }, currentUser.id);
+      toast.success('Modelo salvo');
+      navigate('/modelos');
+    } catch (e) {
+      toast.error('Não foi possível salvar o modelo', {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -131,7 +143,7 @@ export function ModeloEditor(): React.JSX.Element {
               <Button variant="outline" onClick={() => navigate('/modelos')}>
                 Cancelar
               </Button>
-              <Button onClick={salvar}>
+              <Button onClick={() => void salvar()} disabled={salvando}>
                 <Save />
                 Salvar
               </Button>

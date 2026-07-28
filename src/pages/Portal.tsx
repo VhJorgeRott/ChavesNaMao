@@ -5,20 +5,10 @@ import { useData } from '@/data/DataProvider';
 import type { PortalDelivery } from '@/adapters/types';
 import { SignatureCanvas, type SignatureCanvasHandle } from '@/components/portal/SignatureCanvas';
 import { Button } from '@/components/ui/button';
-import { fArea, maskCpf } from '@/lib/format';
+import { fArea, maskCpf } from '@chaves/domain/format';
+import { pedirGeolocalizacao } from '@/lib/browser';
 
 type Fase = 'carregando' | 'invalido' | 'pronto' | 'enviando' | 'concluido';
-
-function pedirGeolocalizacao(): Promise<{ lat: number; lng: number } | null> {
-  return new Promise((resolve) => {
-    if (!('geolocation' in navigator)) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => resolve(null),
-      { timeout: 8000 },
-    );
-  });
-}
 
 export function Portal(): React.JSX.Element {
   const { token = '' } = useParams();

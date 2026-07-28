@@ -1,9 +1,17 @@
-import { ENTREGA_STATUS, type EntregaStatus } from './types';
+import { ENTREGA_STATUS, type EntregaStatus } from './types.js';
 
 /**
  * Máquina de estados da entrega (6 etapas, lineares).
  *
- *   ABERTURA → INTEGRACAO → DOCUMENTOS → ASSINATURA → REGISTRO → CONCLUIDA
+ *   ABERTURA → DOCUMENTOS → CONFISSAO → ASSINATURA → REGISTRO → CONCLUIDA
+ *
+ * As duas assinaturas do processo são etapas distintas, e nessa ordem: a
+ * Confissão de Dívida é assinada remotamente pelo cliente (Clicksign) e só
+ * depois dela o cliente está apto a receber as chaves; o Recebimento de Chaves é
+ * assinado presencialmente, no dia da entrega, no dispositivo de quem atende.
+ *
+ * A antiga etapa INTEGRACAO deixou de existir: os dados de CRM/ERP são puxados
+ * automaticamente ao abrir a entrega (ver `EntregaDetalhe`), sem ação manual.
  *
  * "Insecure Design" do OWASP: não se pode pular etapas. As transições válidas
  * são definidas aqui e DEVEM ser revalidadas no servidor (Edge Function) — esta
@@ -12,9 +20,9 @@ import { ENTREGA_STATUS, type EntregaStatus } from './types';
 
 /** Mapa de cada estado para os estados imediatamente alcançáveis. */
 const TRANSICOES: Record<EntregaStatus, readonly EntregaStatus[]> = {
-  ABERTURA: ['INTEGRACAO'],
-  INTEGRACAO: ['DOCUMENTOS'],
-  DOCUMENTOS: ['ASSINATURA'],
+  ABERTURA: ['DOCUMENTOS'],
+  DOCUMENTOS: ['CONFISSAO'],
+  CONFISSAO: ['ASSINATURA'],
   ASSINATURA: ['REGISTRO'],
   REGISTRO: ['CONCLUIDA'],
   CONCLUIDA: [],

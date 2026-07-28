@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { DataProvider } from '@/data/DataProvider';
+import { CarregarPersistidos } from '@/data/CarregarPersistidos';
 import { SessionProvider } from '@/auth/SessionProvider';
 import { RequireAuth } from '@/auth/RequireAuth';
 import { RequireAdmin } from '@/auth/RequireAdmin';
@@ -53,6 +54,7 @@ function App(): React.JSX.Element {
               <Route
                 element={
                   <RequireAuth>
+                    <CarregarPersistidos />
                     <AppLayout />
                   </RequireAuth>
                 }

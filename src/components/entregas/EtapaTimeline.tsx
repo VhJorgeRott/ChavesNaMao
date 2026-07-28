@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react';
-import { ENTREGA_STATUS, type EntregaStatus } from '@/domain/types';
-import { ENTREGA_STATUS_META } from '@/domain/status';
-import { indiceEtapa } from '@/domain/state-machine';
+import { ENTREGA_STATUS, type EntregaStatus } from '@chaves/domain/types';
+import { ENTREGA_STATUS_META } from '@chaves/domain/status';
+import { indiceEtapa } from '@chaves/domain/state-machine';
 import { cn } from '@/lib/utils';
 
 /** Timeline vertical das 6 etapas, destacando a atual e as concluídas. */

@@ -8,7 +8,7 @@ import type {
   Entrega,
   ItemEntrega,
   Unidade,
-} from '@/domain/types';
+} from '@chaves/domain/types';
 import type { DbState } from './seed';
 
 export interface EntregaResumo {
@@ -21,7 +21,13 @@ export interface EntregaResumo {
 
 export interface EntregaDetalhe extends EntregaResumo {
   documentos: Documento[];
+  /**
+   * Assinatura do Recebimento de Chaves — a presencial, colhida no canvas no dia
+   * da entrega. Mantém o nome antigo porque é a assinatura da entrega em si.
+   */
   assinatura: Assinatura | undefined;
+  /** Assinatura da Confissão de Dívida, remota (Clicksign), anterior à entrega. */
+  assinaturaConfissao: Assinatura | undefined;
   itens: ItemEntrega[];
   auditoria: AuditEntry[];
 }
@@ -53,12 +59,16 @@ export function getEntregaDetalhe(state: DbState, entregaId: string): EntregaDet
   const entrega = state.entregas.find((e) => e.id === entregaId);
   if (!entrega) return null;
   const resumo = resumoFromEntrega(state, entrega);
+  const assinaturas = state.assinaturas.filter((a) => a.entregaId === entregaId);
+  // As duas assinaturas do processo se distinguem pelo método: a Confissão de
+  // Dívida é remota (Clicksign) e o Recebimento de Chaves é presencial (canvas).
   return {
     ...resumo,
     documentos: state.documentos
       .filter((d) => d.entregaId === entregaId)
       .sort((a, b) => b.geradoEm.localeCompare(a.geradoEm)),
-    assinatura: state.assinaturas.find((a) => a.entregaId === entregaId),
+    assinatura: assinaturas.find((a) => a.metodo === 'CANVAS'),
+    assinaturaConfissao: assinaturas.find((a) => a.metodo === 'CLICKSIGN'),
     itens: state.itens.filter((i) => i.entregaId === entregaId),
     auditoria: state.auditoria
       .filter((a) => a.entityId === entregaId)

@@ -1,5 +1,5 @@
-import { ENTREGA_STATUS_META, UNIDADE_STATUS_META } from '@/domain/status';
-import type { EntregaStatus, UnidadeStatus } from '@/domain/types';
+import { ENTREGA_STATUS_META, UNIDADE_STATUS_META } from '@chaves/domain/status';
+import type { EntregaStatus, UnidadeStatus } from '@chaves/domain/types';
 import { cn } from '@/lib/utils';
 
 /**

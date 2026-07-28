@@ -1,4 +1,4 @@
-import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
+import type { Cliente, Empreendimento, Unidade } from '@chaves/domain/types';
 import type { CrmAdapter } from '../types';
 import { AdapterNotFoundError } from '../errors';
 import { clientes, empreendimentos, unidades, unidadeCliente } from '../mock-data';

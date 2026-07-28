@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidCpf } from '@/lib/cpf';
+import { isValidCpf } from '@chaves/domain/cpf';
 import { createAdapters } from './index';
 import { AdapterNotFoundError, AdapterNotImplementedError } from './errors';
 

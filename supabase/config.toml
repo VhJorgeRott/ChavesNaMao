@@ -23,6 +23,15 @@ verify_jwt = false
 [functions.crm-empreendimentos]
 verify_jwt = false
 
+[functions.gerar-termo-pdf]
+verify_jwt = false
+
+[functions.arquivo-entrega]
+verify_jwt = false
+
+[functions.clicksign-enviar]
+verify_jwt = false
+
 # Portal do cliente: gerar o link exige admin autenticado — o JWT (getUser +
 # papel) é validado DENTRO da função.
 [functions.portal-gerar-link]

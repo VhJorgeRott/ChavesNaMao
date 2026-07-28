@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PAPEL, UNIDADE_STATUS } from '@/domain/types';
+import { PAPEL, UNIDADE_STATUS } from '@chaves/domain/types';
 
 /**
  * Schemas Zod compartilhados entre adapters live (CRM e ERP) para validar os

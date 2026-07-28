@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth, useSession } from '@/auth/SessionProvider';
 import { useData } from '@/data/DataProvider';
-import { PAPEL_META } from '@/domain/status';
+import { PAPEL_META } from '@chaves/domain/status';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import {

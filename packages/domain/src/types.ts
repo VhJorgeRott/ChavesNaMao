@@ -28,13 +28,31 @@ export const UNIDADE_STATUS_VISIVEIS: readonly UnidadeStatus[] = [
 
 export const ENTREGA_STATUS = [
   'ABERTURA',
-  'INTEGRACAO',
   'DOCUMENTOS',
+  /** Confissão de dívida enviada ao cliente e assinada remotamente (Clicksign). */
+  'CONFISSAO',
+  /** Recebimento de chaves, assinado presencialmente no dia da entrega. */
   'ASSINATURA',
   'REGISTRO',
   'CONCLUIDA',
 ] as const;
 export type EntregaStatus = (typeof ENTREGA_STATUS)[number];
+
+/**
+ * Situação financeira da unidade no ERP (Mega). Mora no domínio, e não na
+ * camada de adapters, porque o termo de confissão de dívida depende dela: é a
+ * cláusula principal do documento que o cliente assina.
+ */
+export interface SituacaoFinanceira {
+  unidadeId: string;
+  /** ID/nº do contrato como registrado no ERP (Mega). */
+  numeroContrato: string;
+  quitada: boolean;
+  valorContrato: number;
+  saldoDevedor: number;
+  parcelasEmAberto: number;
+  moeda: 'BRL';
+}
 
 export const METODO_ASSINATURA = ['CANVAS', 'CLICKSIGN'] as const;
 export type MetodoAssinatura = (typeof METODO_ASSINATURA)[number];
@@ -69,6 +87,15 @@ export interface Unidade {
    * origem não conhece (seed/mock/CRM) — nesse caso o selo não é exibido.
    */
   inadimplente?: boolean | undefined;
+  /**
+   * Extras do contrato vigente no ERP (Mega), na mesma condição de
+   * `inadimplente`: presentes quando a unidade veio do Mega, `undefined` quando
+   * a origem não os conhece (seed/mock/CRM). Ficam na unidade — e não em estado
+   * de tela — para sobreviverem ao cache e evitarem uma nova ida ao ERP a cada
+   * visita à listagem.
+   */
+  contratoNumero?: string | null;
+  clienteNome?: string | null;
   createdAt: string;
 }
 

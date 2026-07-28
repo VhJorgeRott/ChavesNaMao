@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
-import type { AppUser, AuditEntry } from './types';
+import type { AppUser, AuditEntry } from './types.js';
 
 export type TipoAtividade = 'login' | 'navegacao' | 'acao';
 

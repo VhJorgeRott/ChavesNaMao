@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import type { Cliente, Empreendimento, Unidade } from '@/domain/types';
+import type { Cliente, Empreendimento, Unidade } from '@chaves/domain/types';
 import type { CrmAdapter } from '../types';
 import { AdapterError, AdapterNotFoundError } from '../errors';
+import { detalheErroFuncao } from '../erro-funcao';
 import { clienteSchema, unidadeSchema } from '../schemas';
 import { getSupabase } from '@/lib/supabase';
 
@@ -24,35 +25,6 @@ const empreendimentoSchema = z.object({
   situacaoObra: z.string().nullable().default(null),
 });
 
-/**
- * Extrai o motivo real de uma falha da Edge Function. O supabase-js embrulha
- * respostas não-2xx num `FunctionsHttpError` cujo corpo (com `error`/`detalhe`/
- * `alvo` que a função devolveu) fica em `error.context` — um `Response`. Sem ler
- * isso, o motivo real do CRM se perde e só sobra uma mensagem genérica.
- */
-async function detalheErroFuncao(error: unknown): Promise<string> {
-  const ctx = (error as { context?: unknown } | null)?.context;
-  if (ctx instanceof Response) {
-    try {
-      const body: unknown = await ctx.clone().json();
-      if (body && typeof body === 'object') {
-        const b = body as { error?: unknown; detalhe?: unknown; alvo?: unknown };
-        const partes = [b.error, b.detalhe, b.alvo]
-          .filter((v) => typeof v === 'string' && v.trim() !== '')
-          .map((v) => String(v).trim());
-        if (partes.length) return partes.join(' — ');
-      }
-    } catch {
-      try {
-        const txt = (await ctx.clone().text()).trim();
-        if (txt) return txt.slice(0, 300);
-      } catch {
-        /* corpo já consumido ou ilegível */
-      }
-    }
-  }
-  return error instanceof Error ? error.message : '';
-}
 
 /**
  * Chamadas ao `crm-cliente` em andamento, indexadas pela query de busca. Permite

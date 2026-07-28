@@ -2,6 +2,7 @@ import { env } from '@/lib/env';
 import { buildPortalUrl } from '@/lib/token';
 import { getSupabase } from '@/lib/supabase';
 import { AdapterError } from '../errors';
+import { detalheErroFuncao } from '../erro-funcao';
 import type {
   PortalAdapter,
   PortalAssinarInput,
@@ -25,7 +26,13 @@ export class LivePortalAdapter implements PortalAdapter {
       body: snapshot,
     });
     if (error) {
-      throw new AdapterError('Falha ao gerar o link de assinatura', { cause: error });
+      // Sem o detalhe do corpo, o usuário via só "Falha ao gerar o link" e a
+      // causa (constraint, papel, transição inválida) se perdia.
+      const detalhe = await detalheErroFuncao(error);
+      throw new AdapterError(
+        `Falha ao gerar o link de assinatura${detalhe ? `: ${detalhe}` : ''}`,
+        { cause: error },
+      );
     }
     const token = (data as { token?: unknown } | null)?.token;
     if (typeof token !== 'string' || !token) {
@@ -41,6 +48,23 @@ export class LivePortalAdapter implements PortalAdapter {
     if (error) return { ok: false };
     const d = data as PortalResolveResult | null;
     return d && d.ok ? d : { ok: false };
+  }
+
+  async urlArquivo(entregaId: string, alvo: string): Promise<string | null> {
+    const { data, error } = await getSupabase().functions.invoke('arquivo-entrega', {
+      body: { entregaId, alvo },
+    });
+    // 404 (arquivo/assinatura ausente) não é falha: é "ainda não existe", e quem
+    // chama decide o que fazer. Só propagamos o que for erro de verdade.
+    if (error) {
+      const detalhe = await detalheErroFuncao(error);
+      if (/ausente|não encontrada/i.test(detalhe)) return null;
+      throw new AdapterError(`Falha ao abrir o arquivo${detalhe ? `: ${detalhe}` : ''}`, {
+        cause: error,
+      });
+    }
+    const url = (data as { url?: unknown } | null)?.url;
+    return typeof url === 'string' && url ? url : null;
   }
 
   async registrarAssinatura(input: PortalAssinarInput): Promise<PortalAssinarResult> {

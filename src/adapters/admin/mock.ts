@@ -1,5 +1,5 @@
-import type { AppUser, AuditEntry } from '@/domain/types';
-import { ACAO_NAVEGACAO, ACOES_LOGIN } from '@/domain/atividade';
+import type { AppUser, AuditEntry } from '@chaves/domain/types';
+import { ACAO_NAVEGACAO, ACOES_LOGIN } from '@chaves/domain/atividade';
 import type { AdminAdapter, AtividadeFiltro, AtividadePagina } from '../types';
 
 /**

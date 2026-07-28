@@ -1,6 +1,6 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
-import type { AppUser, Papel } from '@/domain/types';
+import type { AppUser, Papel } from '@chaves/domain/types';
 
 /**
  * Login Microsoft Entra ID via provider Azure do Supabase Auth (OIDC).

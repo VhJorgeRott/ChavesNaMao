@@ -3,8 +3,8 @@ import { Building2, FileText, KeyRound, Loader2, TriangleAlert, User } from 'luc
 import { adapters } from '@/adapters';
 import type { SituacaoFinanceira } from '@/adapters/types';
 import type { UnidadeResumo } from '@/data/selectors';
-import type { Cliente } from '@/domain/types';
-import { UNIDADE_STATUS_META } from '@/domain/status';
+import type { Cliente } from '@chaves/domain/types';
+import { UNIDADE_STATUS_META } from '@chaves/domain/status';
 import { InadimplenciaBadge, UnidadeStatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { fArea, fMoeda, maskCpf } from '@/lib/format';
+import { fArea, fMoeda, maskCpf } from '@chaves/domain/format';
 
 interface InfoIntegracao {
   cliente?: string;

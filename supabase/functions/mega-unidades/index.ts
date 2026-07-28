@@ -431,11 +431,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: userData, error: userErr } = await auth.auth.getUser(jwt);
   if (userErr || !userData?.user) return json({ error: 'unauthorized' }, 401);
 
-  let body: { empreendimentoId?: unknown; empreendimentoNome?: unknown };
+  let body: { empreendimentoId?: unknown; empreendimentoNome?: unknown; schema?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: 'Body JSON inválido' }, 400);
+  }
+
+  // Diagnóstico: { "schema": true } devolve os campos da view de parcelas.
+  // Serve para descobrir os nomes das colunas monetárias (valor, saldo,
+  // vencimento, pago) sem chutar — a query de produção só pede identificação, e
+  // o cálculo da dívida depende de saber o que existe ali. Somente leitura.
+  if (body.schema === true) {
+    try {
+      const introspec = `query { __type(name: "${VIEW}") { fields { name type { name kind ofType { name } } } } }`;
+      const res = await fetch(FABRIC_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${await getFabricToken()}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ query: introspec }),
+      });
+      const bruto = (await res.json()) as {
+        data?: { __type?: { fields?: { name: string; type?: Record<string, unknown> }[] } };
+        errors?: { message: string }[];
+      };
+      if (bruto.errors?.length) {
+        return json({ error: bruto.errors.map((e) => e.message).join('; ') }, 502);
+      }
+      const campos = (bruto.data?.__type?.fields ?? []).map((f) => ({
+        nome: f.name,
+        tipo:
+          (f.type?.name as string | undefined) ??
+          ((f.type?.ofType as { name?: string } | undefined)?.name ?? '?'),
+      }));
+      return json({ view: VIEW, total: campos.length, campos }, 200);
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : 'falha na introspecção' }, 502);
+    }
   }
   const empreendimentoId = String(body.empreendimentoId ?? '').trim();
   const empreendimentoNome = String(body.empreendimentoNome ?? '').trim();
