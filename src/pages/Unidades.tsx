@@ -57,7 +57,7 @@ export function Unidades(): React.JSX.Element {
     <>
       <PageHeader
         icon={Building2}
-        titulo="Unidades"
+        titulo="Empreendimentos"
         subtitulo="Selecione um empreendimento para abrir a disponibilidade"
       />
       <PageContent>

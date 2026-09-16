@@ -21,6 +21,7 @@ const clientEnvSchema = z.object({
   VITE_NOTIFICATION_MODE: adapterMode.optional(),
   VITE_ADMIN_MODE: adapterMode.optional(),
   VITE_PORTAL_MODE: adapterMode.optional(),
+  VITE_ASSISTENCIA_MODE: adapterMode.optional(),
   // Opcionais: em ADAPTER_MODE=mock o Supabase não é usado. São exigidos só
   // quando o cliente Supabase é efetivamente instanciado (ver lib/supabase.ts).
   VITE_SUPABASE_URL: z.string().url().optional(),

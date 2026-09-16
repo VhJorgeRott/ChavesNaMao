@@ -8,6 +8,8 @@ import type { AdapterMode } from '@/lib/env';
 import { env } from '@/lib/env';
 import type { Adapters } from './types';
 
+import { MockAssistenciaAdapter } from './assistencia/mock';
+import { LiveAssistenciaAdapter } from './assistencia/live';
 import { MockCrmAdapter } from './crm/mock';
 import { LiveCrmAdapter } from './crm/live';
 import { MockErpAdapter } from './erp/mock';
@@ -21,6 +23,8 @@ import { LiveAdminAdapter } from './admin/live';
 import { MockPortalAdapter } from './portal/mock';
 import { LivePortalAdapter } from './portal/live';
 
+const makeAssistencia = (m: AdapterMode) =>
+  m === 'live' ? new LiveAssistenciaAdapter() : new MockAssistenciaAdapter();
 const makeCrm = (m: AdapterMode) => (m === 'live' ? new LiveCrmAdapter() : new MockCrmAdapter());
 const makeErp = (m: AdapterMode) => (m === 'live' ? new LiveErpAdapter() : new MockErpAdapter());
 const makeSignature = (m: AdapterMode) =>
@@ -35,6 +39,7 @@ const makePortal = (m: AdapterMode) =>
 /** Constrói o conjunto de adapters com um único modo (usado nos testes). */
 export function createAdapters(mode: AdapterMode): Adapters {
   return {
+    assistencia: makeAssistencia(mode),
     crm: makeCrm(mode),
     erp: makeErp(mode),
     signature: makeSignature(mode),
@@ -46,6 +51,7 @@ export function createAdapters(mode: AdapterMode): Adapters {
 
 /** Adapters resolvidos com o modo por integração (override > global). */
 export const adapters: Adapters = {
+  assistencia: makeAssistencia(env.VITE_ASSISTENCIA_MODE ?? env.VITE_ADAPTER_MODE),
   crm: makeCrm(env.VITE_CRM_MODE ?? env.VITE_ADAPTER_MODE),
   erp: makeErp(env.VITE_ERP_MODE ?? env.VITE_ADAPTER_MODE),
   signature: makeSignature(env.VITE_SIGNATURE_MODE ?? env.VITE_ADAPTER_MODE),

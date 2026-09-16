@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Loader2 } from 'lucide-react';
 import { DataProvider } from '@/data/DataProvider';
 import { CarregarPersistidos } from '@/data/CarregarPersistidos';
 import { SessionProvider } from '@/auth/SessionProvider';
@@ -14,6 +14,7 @@ import { AuthCallback } from '@/pages/AuthCallback';
 import { Unidades } from '@/pages/Unidades';
 import { EmpreendimentoUnidades } from '@/pages/EmpreendimentoUnidades';
 import { Entregas } from '@/pages/Entregas';
+import { Chamados } from '@/pages/Chamados';
 import { EntregaDetalhe } from '@/pages/EntregaDetalhe';
 import { Modelos } from '@/pages/Modelos';
 import { ModeloEditor } from '@/pages/ModeloEditor';
@@ -24,6 +25,7 @@ import { Perfil } from '@/pages/Perfil';
 import { TermosDeUso } from '@/pages/TermosDeUso';
 import { PoliticaDePrivacidade } from '@/pages/PoliticaDePrivacidade';
 import { NotFound } from '@/pages/NotFound';
+import { ModuloEmBreve } from '@/pages/ModuloEmBreve';
 
 // Lazy: a Início carrega Recharts — mantém-no fora do bundle do login/portal.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -70,6 +72,39 @@ function App(): React.JSX.Element {
                 />
                 <Route path="/unidades" element={<Unidades />} />
                 <Route path="/unidades/:empreendimentoId" element={<EmpreendimentoUnidades />} />
+                {/* Assistência técnica */}
+                <Route
+                  path="/assistencia"
+                  element={<Navigate to="/assistencia/chamados" replace />}
+                />
+                <Route path="/assistencia/chamados" element={<Chamados />} />
+
+                {/* Qualidade */}
+                <Route path="/qualidade" element={<Navigate to="/qualidade/vistorias" replace />} />
+                <Route
+                  path="/qualidade/vistorias"
+                  element={
+                    <ModuloEmBreve
+                      icon={ClipboardCheck}
+                      titulo="Vistorias"
+                      subtitulo="Qualidade"
+                      descricao="Registro e acompanhamento das vistorias de qualidade, hoje feitas no Mobuss."
+                    />
+                  }
+                />
+                <Route
+                  path="/qualidade/agenda"
+                  element={
+                    <ModuloEmBreve
+                      icon={CalendarDays}
+                      titulo="Agenda"
+                      subtitulo="Qualidade"
+                      descricao="Agenda de vistorias montada a partir do planejamento das obras no Prevision."
+                    />
+                  }
+                />
+
+                {/* Entrega de obra */}
                 <Route path="/entregas" element={<Entregas />} />
                 <Route path="/entregas/:id" element={<EntregaDetalhe />} />
                 <Route path="/modelos" element={<Modelos />} />

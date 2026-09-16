@@ -2,7 +2,10 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity,
   Building2,
+  CalendarDays,
+  ClipboardCheck,
   FileText,
+  Headset,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -28,19 +31,51 @@ interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Módulo ainda sem funcionalidade — exibe o selo "Em breve". */
+  emBreve?: boolean;
+}
+
+interface NavGroup {
+  titulo: string;
+  itens: NavItem[];
   adminOnly?: boolean;
 }
 
-const NAV: NavItem[] = [
-  { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
-  { to: '/unidades', label: 'Unidades', icon: Building2 },
-  { to: '/entregas', label: 'Entregas', icon: PackageCheck },
-  { to: '/modelos', label: 'Modelos de termo', icon: FileText },
-];
-
-const FOOTER_NAV: NavItem[] = [
-  { to: '/admin', label: 'Usuários', icon: Shield, adminOnly: true },
-  { to: '/atividade', label: 'Atividade', icon: Activity, adminOnly: true },
+/** Menu organizado por módulo da plataforma de atendimento. */
+const NAV_GROUPS: NavGroup[] = [
+  {
+    titulo: 'Geral',
+    itens: [
+      { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
+      { to: '/unidades', label: 'Empreendimentos', icon: Building2 },
+    ],
+  },
+  {
+    titulo: 'Assistência técnica',
+    itens: [{ to: '/assistencia/chamados', label: 'Chamados', icon: Headset }],
+  },
+  {
+    titulo: 'Qualidade',
+    itens: [
+      { to: '/qualidade/vistorias', label: 'Vistorias', icon: ClipboardCheck, emBreve: true },
+      { to: '/qualidade/agenda', label: 'Agenda', icon: CalendarDays, emBreve: true },
+    ],
+  },
+  {
+    titulo: 'Entrega de obra',
+    itens: [
+      { to: '/entregas', label: 'Entregas', icon: PackageCheck },
+      { to: '/modelos', label: 'Modelos de termo', icon: FileText },
+    ],
+  },
+  {
+    titulo: 'Administração',
+    adminOnly: true,
+    itens: [
+      { to: '/admin', label: 'Usuários', icon: Shield },
+      { to: '/atividade', label: 'Atividade', icon: Activity },
+    ],
+  },
 ];
 
 function itemClasses(isActive: boolean): string {
@@ -71,28 +106,18 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }): React.J
       </div>
 
       {/* Navegação */}
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Operação
-        </p>
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={onNavigate}
-            className={({ isActive }) => itemClasses(isActive)}
-          >
-            <item.icon className="h-[18px] w-[18px]" />
-            {item.label}
-          </NavLink>
-        ))}
-
-        {isAdmin && (
-          <>
-            <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Administração
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
+        {NAV_GROUPS.filter((g) => !g.adminOnly || isAdmin).map((grupo, i) => (
+          <div key={grupo.titulo} className="flex flex-col gap-1">
+            <p
+              className={cn(
+                'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground',
+                i === 0 ? 'pt-2' : 'pt-4',
+              )}
+            >
+              {grupo.titulo}
             </p>
-            {FOOTER_NAV.map((item) => (
+            {grupo.itens.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -100,11 +125,16 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }): React.J
                 className={({ isActive }) => itemClasses(isActive)}
               >
                 <item.icon className="h-[18px] w-[18px]" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.emBreve && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    Em breve
+                  </span>
+                )}
               </NavLink>
             ))}
-          </>
-        )}
+          </div>
+        ))}
       </nav>
 
       {/* Rodapé: usuário + (modo dev) troca de papel + sair */}

@@ -30,6 +30,32 @@ export interface CrmAdapter {
 }
 
 // ---------------------------------------------------------------------------
+// Assistência técnica (CV CRM) — chamados abertos pelos clientes
+// ---------------------------------------------------------------------------
+// Tipos e regras vivem em supabase/functions/_shared/assistencia.ts, o mesmo
+// arquivo que a Edge Function usa para filtrar e paginar no servidor.
+import type {
+  FiltroChamados,
+  PaginaChamados,
+} from '../../supabase/functions/_shared/assistencia.ts';
+export type {
+  ChamadoAssistencia,
+  FaseChamado,
+  FiltroChamados,
+  FluxoAssistencia,
+  PaginaChamados,
+  ResumoSituacao,
+} from '../../supabase/functions/_shared/assistencia.ts';
+
+export interface AssistenciaAdapter {
+  /**
+   * Página de chamados do CV. Filtro e paginação acontecem no servidor: o CV
+   * devolve ~10 mil chamados de uma vez e não filtra por nada.
+   */
+  listarChamados(filtro: FiltroChamados & { atualizar?: boolean }): Promise<PaginaChamados>;
+}
+
+// ---------------------------------------------------------------------------
 // ERP (Mega) — situação financeira da unidade
 // ---------------------------------------------------------------------------
 // `SituacaoFinanceira` mora no domínio (o termo de confissão depende dela) e é
@@ -221,6 +247,7 @@ export interface AdminAdapter {
 // Conjunto completo de adapters resolvido por ambiente
 // ---------------------------------------------------------------------------
 export interface Adapters {
+  assistencia: AssistenciaAdapter;
   crm: CrmAdapter;
   erp: ErpAdapter;
   signature: SignatureAdapter;
