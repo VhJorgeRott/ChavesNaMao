@@ -28,6 +28,43 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Último usuário autenticado, para uso SEM INTERNET.
+ *
+ * O supabase-js devolve sessão nula quando o token vence e o refresh falha por
+ * falta de rede — em campo (obra sem sinal) isso jogaria o inspetor no login no
+ * meio de uma FVS. Offline, reaproveitamos o último perfil: o que ele acessa é
+ * só o banco local do próprio aparelho; tudo que vai ao servidor continua
+ * exigindo sessão válida (RLS), e o envio simplesmente espera o login voltar.
+ * Logout explícito apaga o cache.
+ */
+const CHAVE_USUARIO_OFFLINE = 'chavesnamao:usuario-offline:v1';
+
+function lembrarUsuarioOffline(user: AppUser): void {
+  try {
+    localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify(user));
+  } catch {
+    /* storage indisponível: só perde o modo offline */
+  }
+}
+
+function usuarioOffline(): AppUser | null {
+  try {
+    const bruto = localStorage.getItem(CHAVE_USUARIO_OFFLINE);
+    return bruto ? (JSON.parse(bruto) as AppUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+function esquecerUsuarioOffline(): void {
+  try {
+    localStorage.removeItem(CHAVE_USUARIO_OFFLINE);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function SessionProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const mode: 'entra' | 'dev' = isAuthConfigured ? 'entra' : 'dev';
   const { state } = useData();
@@ -48,13 +85,15 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
     async function aplicarSessao(session: Awaited<ReturnType<typeof getCurrentSession>>) {
       if (!ativo) return;
       if (!session) {
-        setEntraUser(null);
-        setEntraStatus('unauthenticated');
+        const offline = !navigator.onLine ? usuarioOffline() : null;
+        setEntraUser(offline);
+        setEntraStatus(offline ? 'authenticated' : 'unauthenticated');
         return;
       }
       try {
         const user = await loadUserFromSession(session);
         if (!ativo) return;
+        lembrarUsuarioOffline(user);
         setEntraUser(user);
         setEntraError(null);
         setEntraStatus('authenticated');
@@ -72,7 +111,7 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
     // o code por sessão via detectSessionInUrl) + assinatura de mudanças.
     void getCurrentSession()
       .then(aplicarSessao)
-      .catch(() => ativo && setEntraStatus('unauthenticated'));
+      .catch(() => ativo && void aplicarSessao(null));
     const sub = onAuthChange((event, session) => {
       // Registra o login uma vez, quando a sessão é efetivamente estabelecida
       // (SIGNED_IN não dispara em refresh de token — evita duplicar).
@@ -112,8 +151,9 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         ),
       // Registra o logout enquanto a sessão ainda existe (o insert exige auth.uid).
       logout: () => {
-        void logAtividade({ action: 'auth.logout', entity: 'auth' }).finally(() =>
-          void logoutAzure(),
+        esquecerUsuarioOffline();
+        void logAtividade({ action: 'auth.logout', entity: 'auth' }).finally(
+          () => void logoutAzure(),
         );
       },
       setDevUserId: () => {

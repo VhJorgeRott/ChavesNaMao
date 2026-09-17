@@ -20,7 +20,8 @@
     "./signatario": { "types": "./dist/signatario.d.ts", "default": "./dist/signatario.js" },
     "./atividade": { "types": "./dist/atividade.d.ts", "default": "./dist/atividade.js" },
     "./cpf": { "types": "./dist/cpf.d.ts", "default": "./dist/cpf.js" },
-    "./format": { "types": "./dist/format.d.ts", "default": "./dist/format.js" }
+    "./format": { "types": "./dist/format.d.ts", "default": "./dist/format.js" },
+    "./qualidade": { "types": "./dist/qualidade.d.ts", "default": "./dist/qualidade.js" }
   },
   "devDependencies": {
     "typescript": "^5.7.3"

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { CalendarDays, ClipboardCheck, Loader2 } from 'lucide-react';
+import { CalendarDays, Loader2 } from 'lucide-react';
 import { DataProvider } from '@/data/DataProvider';
 import { CarregarPersistidos } from '@/data/CarregarPersistidos';
 import { SessionProvider } from '@/auth/SessionProvider';
@@ -26,6 +26,12 @@ import { TermosDeUso } from '@/pages/TermosDeUso';
 import { PoliticaDePrivacidade } from '@/pages/PoliticaDePrivacidade';
 import { NotFound } from '@/pages/NotFound';
 import { ModuloEmBreve } from '@/pages/ModuloEmBreve';
+import { QualidadeProvider } from '@/qualidade/QualidadeProvider';
+import { Inspecoes } from '@/pages/qualidade/Inspecoes';
+import { InspecaoExecucao } from '@/pages/qualidade/InspecaoExecucao';
+import { Pendencias } from '@/pages/qualidade/Pendencias';
+import { ModelosFvs } from '@/pages/qualidade/ModelosFvs';
+import { ModeloFvsEditor } from '@/pages/qualidade/ModeloFvsEditor';
 
 // Lazy: a Início carrega Recharts — mantém-no fora do bundle do login/portal.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -57,7 +63,9 @@ function App(): React.JSX.Element {
                 element={
                   <RequireAuth>
                     <CarregarPersistidos />
-                    <AppLayout />
+                    <QualidadeProvider>
+                      <AppLayout />
+                    </QualidadeProvider>
                   </RequireAuth>
                 }
               >
@@ -80,18 +88,12 @@ function App(): React.JSX.Element {
                 <Route path="/assistencia/chamados" element={<Chamados />} />
 
                 {/* Qualidade */}
-                <Route path="/qualidade" element={<Navigate to="/qualidade/vistorias" replace />} />
-                <Route
-                  path="/qualidade/vistorias"
-                  element={
-                    <ModuloEmBreve
-                      icon={ClipboardCheck}
-                      titulo="Vistorias"
-                      subtitulo="Qualidade"
-                      descricao="Registro e acompanhamento das vistorias de qualidade, hoje feitas no Mobuss."
-                    />
-                  }
-                />
+                <Route path="/qualidade" element={<Navigate to="/qualidade/inspecoes" replace />} />
+                <Route path="/qualidade/inspecoes" element={<Inspecoes />} />
+                <Route path="/qualidade/inspecoes/:id" element={<InspecaoExecucao />} />
+                <Route path="/qualidade/pendencias" element={<Pendencias />} />
+                <Route path="/qualidade/modelos" element={<ModelosFvs />} />
+                <Route path="/qualidade/modelos/:id" element={<ModeloFvsEditor />} />
                 <Route
                   path="/qualidade/agenda"
                   element={

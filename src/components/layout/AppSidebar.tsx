@@ -4,10 +4,12 @@ import {
   Building2,
   CalendarDays,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   Headset,
   KeyRound,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   PackageCheck,
   Shield,
@@ -57,7 +59,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     titulo: 'Qualidade',
     itens: [
-      { to: '/qualidade/vistorias', label: 'Vistorias', icon: ClipboardCheck, emBreve: true },
+      { to: '/qualidade/inspecoes', label: 'Inspeções (FVS)', icon: ClipboardCheck },
+      { to: '/qualidade/pendencias', label: 'Pendências', icon: ListChecks },
+      { to: '/qualidade/modelos', label: 'Modelos de FVS', icon: ClipboardList },
       { to: '/qualidade/agenda', label: 'Agenda', icon: CalendarDays, emBreve: true },
     ],
   },
