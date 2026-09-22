@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, TriangleAlert } from 'lucide-react';
 import { useData } from '@/data/DataProvider';
-import { UNIDADE_STATUS_VISIVEIS, type Empreendimento } from '@chaves/domain/types';
+import type { Empreendimento } from '@chaves/domain/types';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -45,10 +45,8 @@ export function Unidades(): React.JSX.Element {
     const q = busca.trim().toLowerCase();
     return empreendimentos
       .map((emp) => {
-        const unidades = state.unidades.filter(
-          (u) => u.empreendimentoId === emp.id && UNIDADE_STATUS_VISIVEIS.includes(u.status),
-        );
-        return { emp, total: unidades.length };
+        const total = state.unidades.filter((u) => u.empreendimentoId === emp.id).length;
+        return { emp, total };
       })
       .filter(({ emp }) => !q || `${emp.nome} ${emp.cidade} ${emp.uf}`.toLowerCase().includes(q));
   }, [empreendimentos, state.unidades, busca]);

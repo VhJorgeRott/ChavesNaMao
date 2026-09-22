@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { CalendarDays, Loader2 } from 'lucide-react';
+import { CalendarDays, Loader2, SearchCheck } from 'lucide-react';
 import { DataProvider } from '@/data/DataProvider';
 import { CarregarPersistidos } from '@/data/CarregarPersistidos';
 import { SessionProvider } from '@/auth/SessionProvider';
@@ -87,7 +87,20 @@ function App(): React.JSX.Element {
                 />
                 <Route path="/assistencia/chamados" element={<Chamados />} />
 
-                {/* Qualidade */}
+                {/* Vistorias */}
+                <Route
+                  path="/vistorias"
+                  element={
+                    <ModuloEmBreve
+                      icon={SearchCheck}
+                      titulo="Vistoria de unidades"
+                      subtitulo="Vistorias"
+                      descricao="Vistoria das unidades antes da entrega: checklist por ambiente, fotos e registro de pendências."
+                    />
+                  }
+                />
+
+                {/* Qualidade — em stand-by: fora do menu, rotas mantidas. */}
                 <Route path="/qualidade" element={<Navigate to="/qualidade/inspecoes" replace />} />
                 <Route path="/qualidade/inspecoes" element={<Inspecoes />} />
                 <Route path="/qualidade/inspecoes/:id" element={<InspecaoExecucao />} />

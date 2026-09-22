@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Cliente, Empreendimento, Unidade } from '@chaves/domain/types';
-import type { CrmAdapter } from '../types';
+import type { BuscaCliente, CrmAdapter, SituacaoClienteCv } from '../types';
 import { AdapterError, AdapterNotFoundError } from '../errors';
 import { detalheErroFuncao } from '../erro-funcao';
 import { clienteSchema, unidadeSchema } from '../schemas';
@@ -13,6 +13,29 @@ import { getSupabase } from '@/lib/supabase';
  * endpoint allow-listed, segredos fora do bundle). O navegador só invoca as
  * funções autenticado (JWT).
  */
+
+const situacaoClienteSchema = z.object({
+  atendimentos: z
+    .object({
+      id: z.string(),
+      protocolo: z.string().nullable(),
+      titulo: z.string(),
+      assunto: z.string().nullable(),
+      subassunto: z.string().nullable(),
+      situacao: z.string(),
+      abertoEm: z.string().nullable(),
+      finalizadoEm: z.string().nullable(),
+      canceladoEm: z.string().nullable(),
+      aberto: z.boolean(),
+      responsavel: z.string().nullable(),
+      unidadeId: z.string().nullable(),
+      unidade: z.string().nullable(),
+      bloco: z.string().nullable(),
+      empreendimentoId: z.string().nullable(),
+    })
+    .array(),
+  juridico: z.object({ ativo: z.boolean().nullable(), valor: z.string().nullable() }),
+}) satisfies z.ZodType<SituacaoClienteCv>;
 
 const empreendimentoSchema = z.object({
   id: z.string(),
@@ -52,22 +75,24 @@ export class LiveCrmAdapter implements CrmAdapter {
     return unidadeSchema.array().parse(data);
   }
 
-  async getClienteByUnidade(
-    _unidadeId: string,
-    busca?: { nome?: string | null; documento?: string | null },
-  ): Promise<Cliente> {
-    // A unidade em tela vem do ERP (Mega), que não expõe o idpessoa do CV. Por
-    // isso localizamos a pessoa no cadastro do CV por documento (preferencial)
-    // ou nome — dados que o app já tem em mãos.
+  async getClienteByUnidade(_unidadeId: string, busca?: BuscaCliente): Promise<Cliente> {
+    // Preferencial: titular da reserva da unidade no CV (ids do CV). A busca
+    // por documento/nome segue junto como alternativa, caso a unidade não
+    // tenha reserva vigente.
     const documento = (busca?.documento ?? '').replace(/\D/g, '');
     const nome = (busca?.nome ?? '').trim();
-    if (!documento && !nome) {
+    const cv = busca?.cvUnidade ?? null;
+    if (!cv && !documento && !nome) {
       throw new AdapterNotFoundError('Cliente para unidade (sem nome/documento)', _unidadeId);
     }
 
     const params = new URLSearchParams();
+    if (cv) {
+      params.set('empreendimentoId', cv.empreendimentoId);
+      params.set('unidadeId', cv.unidadeId);
+    }
     if (documento) params.set('documento', documento);
-    else params.set('nome', nome);
+    else if (nome) params.set('nome', nome);
 
     // Deduplica chamadas idênticas concorrentes (ex.: StrictMode dispara o efeito
     // duas vezes em dev). Sem isso, duas invocações simultâneas fariam dois logins
@@ -93,5 +118,21 @@ export class LiveCrmAdapter implements CrmAdapter {
     } finally {
       clientesEmVoo.delete(chave);
     }
+  }
+
+  async getSituacaoCliente(documento: string): Promise<SituacaoClienteCv> {
+    const doc = documento.replace(/\D/g, '');
+    const { data, error } = await getSupabase().functions.invoke(
+      `crm-situacao-cliente?documento=${encodeURIComponent(doc)}`,
+      { method: 'GET' },
+    );
+    if (error) {
+      const detalhe = await detalheErroFuncao(error);
+      throw new AdapterError(
+        `Falha ao buscar a situação do cliente no CRM${detalhe ? `: ${detalhe}` : ''}`,
+        { cause: error },
+      );
+    }
+    return situacaoClienteSchema.parse(data);
   }
 }

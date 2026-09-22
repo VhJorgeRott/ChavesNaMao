@@ -19,8 +19,10 @@ import type { Empreendimento, Unidade } from '@chaves/domain/types';
  * v2: quem já usou o app tem empreendimentos e unidades de DEMONSTRAÇÃO
  * gravados aqui, de quando o seed entrava no estado mesmo em modo live. Sem
  * trocar a chave, eles voltariam do cache e continuariam na tela.
+ * v3: o catálogo passou a trazer todas as unidades do CV (não só as vendidas
+ * do Mega); o cache antigo esconderia as disponíveis até expirar.
  */
-const CHAVE = 'chavesnamao:catalogo:v2';
+const CHAVE = 'chavesnamao:catalogo:v3';
 
 export interface CatalogoCache {
   empreendimentos: Empreendimento[];

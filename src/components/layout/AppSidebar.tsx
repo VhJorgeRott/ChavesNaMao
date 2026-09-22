@@ -12,6 +12,7 @@ import {
   ListChecks,
   LogOut,
   PackageCheck,
+  SearchCheck,
   Shield,
   type LucideIcon,
 } from 'lucide-react';
@@ -41,6 +42,11 @@ interface NavGroup {
   titulo: string;
   itens: NavItem[];
   adminOnly?: boolean;
+  /**
+   * Módulo em stand-by: some do menu, mas as rotas continuam no ar (acesso
+   * direto pela URL) para ser religado sem retrabalho.
+   */
+  oculto?: boolean;
 }
 
 /** Menu organizado por módulo da plataforma de atendimento. */
@@ -57,7 +63,12 @@ const NAV_GROUPS: NavGroup[] = [
     itens: [{ to: '/assistencia/chamados', label: 'Chamados', icon: Headset }],
   },
   {
+    titulo: 'Vistorias',
+    itens: [{ to: '/vistorias', label: 'Vistoria de unidades', icon: SearchCheck, emBreve: true }],
+  },
+  {
     titulo: 'Qualidade',
+    oculto: true,
     itens: [
       { to: '/qualidade/inspecoes', label: 'Inspeções (FVS)', icon: ClipboardCheck },
       { to: '/qualidade/pendencias', label: 'Pendências', icon: ListChecks },
@@ -111,7 +122,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }): React.J
 
       {/* Navegação */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-        {NAV_GROUPS.filter((g) => !g.adminOnly || isAdmin).map((grupo, i) => (
+        {NAV_GROUPS.filter((g) => !g.oculto && (!g.adminOnly || isAdmin)).map((grupo, i) => (
           <div key={grupo.titulo} className="flex flex-col gap-1">
             <p
               className={cn(

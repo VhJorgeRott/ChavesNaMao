@@ -6,6 +6,8 @@ import {
   ArrowUp,
   Building2,
   ChevronsUpDown,
+  Eye,
+  DoorOpen,
   KeyRound,
   Loader2,
   Send,
@@ -17,7 +19,7 @@ import { toast } from 'sonner';
 import { useData } from '@/data/DataProvider';
 import { listarUnidades, type UnidadeResumo } from '@/data/selectors';
 import { useSession } from '@/auth/SessionProvider';
-import { UNIDADE_STATUS_VISIVEIS, type Empreendimento } from '@chaves/domain/types';
+import { UNIDADE_STATUS, type Empreendimento, type UnidadeStatus } from '@chaves/domain/types';
 import { UNIDADE_STATUS_META } from '@chaves/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
@@ -42,6 +44,12 @@ import { cn } from '@/lib/utils';
 const TODOS = '__todos__';
 const INADIMPLENTE = 'inadimplente';
 const EM_DIA = 'emdia';
+
+/**
+ * Sem venda não há cliente nem contrato: essas unidades aparecem no catálogo,
+ * mas não entram no fluxo de entrega (nem no envio de termo em massa).
+ */
+const SEM_ENTREGA: readonly UnidadeStatus[] = ['DISPONIVEL', 'EM_OBRAS'];
 
 /** Colunas ordenáveis da tabela de unidades. */
 type CampoOrdem = 'contrato' | 'cliente' | 'unidade' | 'area' | 'status' | 'inadimplente';
@@ -96,6 +104,8 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const [detalhe, setDetalhe] = useState<UnidadeResumo | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [enviandoMassa, setEnviandoMassa] = useState(false);
+  // Falha parcial das integrações (CV ou Mega) — fica visível na tela.
+  const [avisoIntegracao, setAvisoIntegracao] = useState<string | null>(null);
   // Só há espera de verdade na primeira vez: com unidades em cache a tabela já
   // aparece, e `garantirUnidades` decide sozinho se precisa revalidar.
   const temUnidadesEmCache = state.unidades.some((u) => u.empreendimentoId === empreendimentoId);
@@ -131,13 +141,15 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     let ativo = true;
     if (!empreendimento) return;
     garantirUnidades(empreendimento)
-      .then(() => {
-        if (ativo) setCarregandoInfo(false);
+      .then(({ aviso }) => {
+        if (!ativo) return;
+        setCarregandoInfo(false);
+        setAvisoIntegracao(aviso ?? null);
       })
       .catch((e: unknown) => {
         if (!ativo) return;
         setCarregandoInfo(false);
-        toast.error(e instanceof Error ? e.message : 'Falha ao carregar unidades do ERP (Mega)');
+        toast.error(e instanceof Error ? e.message : 'Falha ao carregar as unidades');
       });
     return () => {
       ativo = false;
@@ -160,15 +172,16 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     return mapa;
   }, [state.unidades, empreendimentoId]);
 
-  // Unidades do empreendimento, apenas com status visíveis.
+  // Todas as unidades cadastradas no empreendimento, vendidas ou não.
   const unidades = useMemo(
-    () =>
-      listarUnidades(state).filter(
-        (r) =>
-          r.unidade.empreendimentoId === empreendimentoId &&
-          UNIDADE_STATUS_VISIVEIS.includes(r.unidade.status),
-      ),
+    () => listarUnidades(state).filter((r) => r.unidade.empreendimentoId === empreendimentoId),
     [state, empreendimentoId],
+  );
+
+  // Opções do filtro de status: só as que existem neste empreendimento.
+  const statusPresentes = useMemo(
+    () => UNIDADE_STATUS.filter((s) => unidades.some((r) => r.unidade.status === s)),
+    [unidades],
   );
 
   const filtradas = useMemo(() => {
@@ -224,6 +237,7 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     () => ({
       total: unidades.length,
       vendidas: unidades.filter((r) => r.unidade.status === 'VENDIDA').length,
+      disponiveis: unidades.filter((r) => r.unidade.status === 'DISPONIVEL').length,
       inadimplentes: unidades.filter((r) => infoIntegracao[r.unidade.id]?.inadimplente === true)
         .length,
       entregasIniciadas: unidades.filter((r) => r.entregaAtiva).length,
@@ -246,13 +260,18 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
     }
   }
 
-  // Seleção limitada às linhas atualmente visíveis (após busca/filtro/ordenação).
+  // Seleção limitada às linhas visíveis (após busca/filtro/ordenação) que podem
+  // entrar no fluxo de entrega.
+  const selecionaveis = useMemo(
+    () => ordenadas.filter((r) => !SEM_ENTREGA.includes(r.unidade.status)),
+    [ordenadas],
+  );
   const selecionadasVisiveis = useMemo(
-    () => ordenadas.filter((r) => selecionadas.has(r.unidade.id)),
-    [ordenadas, selecionadas],
+    () => selecionaveis.filter((r) => selecionadas.has(r.unidade.id)),
+    [selecionaveis, selecionadas],
   );
   const todasSelecionadas =
-    ordenadas.length > 0 && selecionadasVisiveis.length === ordenadas.length;
+    selecionaveis.length > 0 && selecionadasVisiveis.length === selecionaveis.length;
   const algumaSelecionada = selecionadasVisiveis.length > 0 && !todasSelecionadas;
 
   function alternarUma(id: string) {
@@ -267,10 +286,10 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   function alternarTodas() {
     setSelecionadas((atual) => {
       const nova = new Set(atual);
-      if (ordenadas.every((r) => nova.has(r.unidade.id)) && ordenadas.length > 0) {
-        ordenadas.forEach((r) => nova.delete(r.unidade.id));
+      if (selecionaveis.every((r) => nova.has(r.unidade.id)) && selecionaveis.length > 0) {
+        selecionaveis.forEach((r) => nova.delete(r.unidade.id));
       } else {
-        ordenadas.forEach((r) => nova.add(r.unidade.id));
+        selecionaveis.forEach((r) => nova.add(r.unidade.id));
       }
       return nova;
     });
@@ -338,13 +357,13 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
       </header>
 
       <PageContent>
-        <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
           <KpiCard
             icon={Building2}
             accent="hsl(var(--primary))"
             label="Unidades"
             value={metricas.total}
-            tooltip="Total de unidades vendidas deste empreendimento."
+            tooltip="Total de unidades cadastradas no empreendimento, vendidas ou não."
           />
           <KpiCard
             icon={Tag}
@@ -352,6 +371,13 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             label="Vendidas"
             value={metricas.vendidas}
             tooltip="Unidades com status Vendida."
+          />
+          <KpiCard
+            icon={DoorOpen}
+            accent="#3b82f6"
+            label="Disponíveis"
+            value={metricas.disponiveis}
+            tooltip="Unidades ainda sem venda no CV."
           />
           <KpiCard
             icon={TriangleAlert}
@@ -380,7 +406,7 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todos os status</SelectItem>
-              {UNIDADE_STATUS_VISIVEIS.map((s) => (
+              {statusPresentes.map((s) => (
                 <SelectItem key={s} value={s}>
                   {UNIDADE_STATUS_META[s].label}
                 </SelectItem>
@@ -398,6 +424,13 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             </SelectContent>
           </Select>
         </div>
+
+        {avisoIntegracao && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            {avisoIntegracao}
+          </div>
+        )}
 
         {selecionadasVisiveis.length > 0 && (
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -447,8 +480,9 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
               </thead>
               <tbody>
                 {ordenadas.map((resumo) => {
-                  const { unidade, entregaAtiva } = resumo;
+                  const { unidade } = resumo;
                   const selecionada = selecionadas.has(unidade.id);
+                  const semEntrega = SEM_ENTREGA.includes(unidade.status);
                   return (
                     <tr
                       key={unidade.id}
@@ -460,7 +494,8 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                       <td className="px-4 py-3">
                         <Checkbox
                           aria-label={`Selecionar ${unidade.identificacao}`}
-                          checked={selecionada}
+                          checked={selecionada && !semEntrega}
+                          disabled={semEntrega}
                           onChange={() => alternarUma(unidade.id)}
                         />
                       </td>
@@ -509,24 +544,10 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {entregaAtiva ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate(`/entregas/${entregaAtiva.id}`)}
-                          >
-                            Ver entrega
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            disabled={iniciando === unidade.id}
-                            onClick={() => iniciar(resumo)}
-                          >
-                            <KeyRound />
-                            {iniciando === unidade.id ? 'Iniciando...' : 'Iniciar entrega'}
-                          </Button>
-                        )}
+                        <Button variant="outline" size="sm" onClick={() => setDetalhe(resumo)}>
+                          <Eye />
+                          Ver unidade
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -539,13 +560,17 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
             (carregandoInfo ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                Buscando unidades no Mega...
+                Buscando unidades...
               </div>
             ) : (
               <EmptyState
                 icon={Building2}
                 titulo="Nenhuma unidade encontrada"
-                descricao="Ajuste a busca ou o filtro de status."
+                descricao={
+                  unidades.length > 0
+                    ? 'Ajuste a busca ou o filtro de status.'
+                    : 'O empreendimento não tem unidades no CV nem contratos no Mega.'
+                }
               />
             ))}
         </div>

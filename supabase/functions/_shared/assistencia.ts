@@ -95,6 +95,8 @@ export interface FiltroChamados {
   fase?: FaseChamado | 'abertos';
   situacaoId?: string;
   empreendimentoId?: string;
+  /** Id da unidade no CV — para a ficha da unidade. */
+  unidadeId?: string;
   busca?: string;
   pagina?: number;
   porPagina?: number;
@@ -161,6 +163,7 @@ export function filtrarChamados(
   const base = doFluxo.filter(
     (c) =>
       (!filtro.empreendimentoId || c.empreendimento?.id === filtro.empreendimentoId) &&
+      (!filtro.unidadeId || c.unidade?.id === filtro.unidadeId) &&
       (!q || casaBusca(c, q)),
   );
 
@@ -218,6 +221,8 @@ export function filtroDeQuery(params: URLSearchParams): FiltroChamados {
   if (situacaoId) filtro.situacaoId = situacaoId;
   const empreendimentoId = params.get('empreendimentoId');
   if (empreendimentoId) filtro.empreendimentoId = empreendimentoId;
+  const unidadeId = params.get('unidadeId');
+  if (unidadeId) filtro.unidadeId = unidadeId;
   const busca = params.get('busca');
   if (busca) filtro.busca = busca.slice(0, 200);
   const pagina = Number(params.get('pagina'));

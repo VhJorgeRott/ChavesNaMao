@@ -35,6 +35,7 @@ import { logAtividade } from '@/lib/atividade';
 import { createInitialState, type DbState } from './seed';
 import { getEntregaDetalhe } from './selectors';
 import { gravarCatalogo, lerCatalogo } from './cache';
+import { mesclarCatalogo } from './catalogo-unidades';
 import {
   carregarCheckpoints,
   carregarModelos,
@@ -113,11 +114,15 @@ export interface DataActions {
    */
   garantirEmpreendimentos(opts?: { forcar?: boolean }): Promise<Empreendimento[]>;
   /**
-   * Catálogo de unidades do empreendimento (Mega + área do CV), servido do cache
+   * Catálogo completo de unidades do empreendimento (todas as do CV, com
+   * contrato/cliente do Mega nas vendidas), servido do cache
    * enquanto recente. Chamadas concorrentes para o mesmo empreendimento
    * compartilham uma única ida à rede.
    */
-  garantirUnidades(empreendimento: Empreendimento, opts?: { forcar?: boolean }): Promise<void>;
+  garantirUnidades(
+    empreendimento: Empreendimento,
+    opts?: { forcar?: boolean },
+  ): Promise<{ aviso?: string }>;
   /**
    * Puxa os dados de contato do cliente no CRM para uma entrega já existente.
    * Roda automaticamente ao abrir a tela de detalhe (não há mais etapa manual
@@ -372,8 +377,11 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
         | Partial<UnidadeErp>
         | undefined;
       const nome = unidadeErp?.clienteNome?.trim() || null;
+      const cvUnidade = unidadeErp?.cvUnidadeId
+        ? { empreendimentoId: unidadeErp.empreendimentoId ?? '', unidadeId: unidadeErp.cvUnidadeId }
+        : null;
       try {
-        const cliente = await adapters.crm.getClienteByUnidade(unidadeId, { nome });
+        const cliente = await adapters.crm.getClienteByUnidade(unidadeId, { nome, cvUnidade });
         // Persiste (upsert) o cliente resolvido para que as telas de entrega o
         // encontrem pelo `entrega.clienteId`. Sem isso, os dados vêm do CRM mas
         // nunca chegam ao estado e o cadastro aparece em branco.
@@ -658,40 +666,50 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
    * pedem o mesmo empreendimento, e só vai à rede quando precisa de verdade.
    */
   const garantirUnidades = useCallback(
-    async (empreendimento: Empreendimento, opts: { forcar?: boolean } = {}): Promise<void> => {
+    async (
+      empreendimento: Empreendimento,
+      opts: { forcar?: boolean } = {},
+    ): Promise<{ aviso?: string }> => {
       const { id, nome } = empreendimento;
       const emVooAtual = emVoo.current.get(id);
-      if (emVooAtual) return emVooAtual;
+      if (emVooAtual) {
+        await emVooAtual;
+        return {};
+      }
 
       if (!opts.forcar) {
         const carimbo = stateRef.current.sincronizadoEm[id];
         const temUnidades = stateRef.current.unidades.some((u) => u.empreendimentoId === id);
-        if (carimbo && temUnidades && Date.now() - Date.parse(carimbo) < TTL_CATALOGO_MS) return;
+        if (carimbo && temUnidades && Date.now() - Date.parse(carimbo) < TTL_CATALOGO_MS) return {};
       }
 
-      // A view de parcelas do Mega não traz área; a área vem do CV. Buscamos as
-      // duas em paralelo e mesclamos pelo número da unidade (último segmento da
-      // identificação, normalizado). Best-effort: sem match, a área fica nula.
-      const chaveArea = (ident: string): string =>
-        (ident.split('·').pop() ?? '').replace(/\s+/g, '').toUpperCase();
-
+      // O mapa do CV tem todas as unidades cadastradas; o Mega só as vendidas
+      // (com contrato), e há empreendimentos que ainda nem existem lá. Buscamos
+      // os dois em paralelo e mesclamos (ver `mesclarCatalogo`). Cada fonte é
+      // opcional: a falha de uma não pode esconder o que a outra trouxe — só
+      // quando as duas falham a busca falha.
+      let aviso: string | undefined;
       const busca = (async () => {
-        const [doErp, doCrm] = await Promise.all([
+        const [erp, crm] = await Promise.allSettled([
           adapters.erp.getUnidadesByEmpreendimento(id, nome),
-          adapters.crm.getUnidadesByEmpreendimento(id).catch(() => [] as Unidade[]),
+          adapters.crm.getUnidadesByEmpreendimento(id),
         ]);
-        const areaPorChave = new Map<string, number>();
-        for (const u of doCrm) {
-          if (u.areaM2 != null && u.areaM2 > 0) {
-            areaPorChave.set(chaveArea(u.identificacao), u.areaM2);
-          }
+        if (erp.status === 'rejected' && crm.status === 'rejected') throw crm.reason;
+        if (erp.status === 'rejected') {
+          console.warn('[garantirUnidades] Mega indisponível', erp.reason);
+          aviso = 'Mega indisponível: cliente, contrato e inadimplência não foram carregados.';
+        } else if (crm.status === 'rejected') {
+          console.warn('[garantirUnidades] CV indisponível', crm.reason);
+          aviso =
+            'Não foi possível ler o mapa de unidades do CV — exibindo só as unidades com contrato no Mega.';
         }
-        const enriquecidas = doErp.map((u) =>
-          u.areaM2 == null
-            ? { ...u, areaM2: areaPorChave.get(chaveArea(u.identificacao)) ?? null }
-            : u,
+        sincronizarUnidades(
+          id,
+          mesclarCatalogo(
+            erp.status === 'fulfilled' ? erp.value : [],
+            crm.status === 'fulfilled' ? crm.value : [],
+          ),
         );
-        sincronizarUnidades(id, enriquecidas);
         setState((s) => ({
           ...s,
           sincronizadoEm: { ...s.sincronizadoEm, [id]: new Date().toISOString() },
@@ -704,6 +722,7 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       } finally {
         emVoo.current.delete(id);
       }
+      return aviso ? { aviso } : {};
     },
     [sincronizarUnidades],
   );

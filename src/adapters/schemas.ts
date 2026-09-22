@@ -37,6 +37,9 @@ export const unidadeSchema = z.object({
   status: unidadeStatusSchema,
   areaM2: z.number().nullable(),
   inadimplente: z.boolean().optional(),
+  cvUnidadeId: z.string().nullable().optional(),
+  situacaoCv: z.string().nullable().optional(),
+  motivoBloqueioCv: z.string().nullable().optional(),
   createdAt: z.string(),
 });
 

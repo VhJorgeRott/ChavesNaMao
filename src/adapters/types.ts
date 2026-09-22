@@ -14,20 +14,35 @@ import type { TipoAtividade } from '@chaves/domain/atividade';
 // ---------------------------------------------------------------------------
 // CRM (CV CRM) — cadastro de empreendimentos, unidades e dados do cliente
 // ---------------------------------------------------------------------------
+export interface BuscaCliente {
+  nome?: string | null;
+  documento?: string | null;
+  /** Ids da unidade no CV (empreendimento + unidade). */
+  cvUnidade?: { empreendimentoId: string; unidadeId: string } | null;
+}
+
 export interface CrmAdapter {
   getEmpreendimentos(): Promise<Empreendimento[]>;
   /** Unidades do empreendimento (mapa de disponibilidade do CV). */
   getUnidadesByEmpreendimento(empreendimentoId: string): Promise<Unidade[]>;
   /**
-   * Cliente da unidade. Como a unidade em tela vem do ERP (Mega), que não
-   * conhece o `idpessoa` do CV, a resolução usa uma dica de busca (`nome` ou
-   * `documento`) já disponível no app para localizar a pessoa no cadastro do CV.
+   * Cliente da unidade. Com `cvUnidade` (ids do CV), resolve pelo titular da
+   * reserva vigente — o caminho confiável. Sem ele, ou sem reserva, cai na
+   * busca por `documento`/`nome` no cadastro de pessoas do CV.
    */
-  getClienteByUnidade(
-    unidadeId: string,
-    busca?: { nome?: string | null; documento?: string | null },
-  ): Promise<Cliente>;
+  getClienteByUnidade(unidadeId: string, busca?: BuscaCliente): Promise<Cliente>;
+  /**
+   * Atendimentos de relacionamento e sinalizador jurídico da pessoa no CV,
+   * pelo CPF/CNPJ — a API do CV não filtra atendimentos por unidade.
+   */
+  getSituacaoCliente(documento: string): Promise<SituacaoClienteCv>;
 }
+
+import type { SituacaoClienteCv } from '../../supabase/functions/_shared/situacao-cliente.ts';
+export type {
+  AtendimentoRelacionamento,
+  SituacaoClienteCv,
+} from '../../supabase/functions/_shared/situacao-cliente.ts';
 
 // ---------------------------------------------------------------------------
 // Assistência técnica (CV CRM) — chamados abertos pelos clientes

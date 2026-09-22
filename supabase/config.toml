@@ -26,6 +26,9 @@ verify_jwt = false
 [functions.crm-assistencias]
 verify_jwt = false
 
+[functions.crm-situacao-cliente]
+verify_jwt = false
+
 [functions.gerar-termo-pdf]
 verify_jwt = false
 

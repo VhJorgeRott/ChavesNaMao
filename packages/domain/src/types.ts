@@ -96,6 +96,15 @@ export interface Unidade {
    */
   contratoNumero?: string | null;
   clienteNome?: string | null;
+  /**
+   * Extras do mapa de disponibilidade do CV. `cvUnidadeId` é o id da unidade no
+   * CV — difere de `id` quando a unidade veio do Mega — e é por ele que se
+   * cruzam os chamados de assistência. `situacaoCv` é a situação comercial
+   * crua ("vendida", "bloqueada", "reservada"...).
+   */
+  cvUnidadeId?: string | null | undefined;
+  situacaoCv?: string | null | undefined;
+  motivoBloqueioCv?: string | null | undefined;
   createdAt: string;
 }
 

@@ -1,6 +1,12 @@
-// Supabase Edge Function (Deno) — proxy seguro para o cadastro de pessoas do CV CRM (v3).
+// Supabase Edge Function (Deno) — proxy seguro para o cliente de uma unidade no CV CRM.
 //
-// Recebe ?documento=... e/ou ?nome=... (query) e consulta o endpoint de pessoas
+// Caminho principal — ?empreendimentoId=...&unidadeId=... (ids do CV): lê a
+// unidade (/api/v1/cadastros/empreendimentos/{emp}/unidades/{un}), cujo
+// `situacao.vendida` é o id da reserva vigente, e devolve o TITULAR dessa
+// reserva (/api/v1/comercial/reservas/{id}). Usa só email/token (v1) — não
+// depende de nome nem do login v3.
+//
+// Alternativa — ?documento=... e/ou ?nome=... (query): consulta o endpoint de pessoas
 // da API v3 do CV. A v3 usa Bearer Token temporário (válido por 6h): a função
 // faz login em /api/v3/auth/token (email + senha + painel), CACHEIA o token em
 // memória e o reutiliza até perto de expirar, renovando também ao receber 401.
@@ -157,6 +163,49 @@ function extrairLista(raw: unknown): CrmPessoa[] {
   return [];
 }
 
+/**
+ * Titular da reserva vigente de uma unidade, via API v1 (email/token).
+ * `null` quando a unidade não tem reserva vendida/ativa. Só os campos de
+ * contato saem daqui — a reserva traz endereço, renda, comissões etc.
+ */
+async function titularDaUnidade(
+  empreendimentoId: string,
+  unidadeId: string,
+): Promise<Record<string, string> | null> {
+  const baseCrm = Deno.env.get('CRM_API_BASE_URL');
+  const email = Deno.env.get('CRM_API_EMAIL');
+  const token = Deno.env.get('CRM_API_TOKEN');
+  if (!baseCrm || !email || !token) return null;
+  const origem = new URL(baseCrm).origin;
+  const headers = { email, token, accept: 'application/json' };
+
+  const respUn = await fetch(
+    `${origem}/api/v1/cadastros/empreendimentos/${empreendimentoId}/unidades/${unidadeId}`,
+    { headers },
+  );
+  if (!respUn.ok) return null;
+  const un = (await respUn.json()) as { dados?: { situacao?: Record<string, unknown> }[] };
+  const situacao = un.dados?.[0]?.situacao ?? {};
+  // `vendida` é o id da reserva que vendeu a unidade (0/null quando não há).
+  const idReserva = String(situacao.vendida ?? '').trim();
+  if (!/^\d+$/.test(idReserva) || idReserva === '0') return null;
+
+  const respRes = await fetch(`${origem}/api/v1/comercial/reservas/${idReserva}`, { headers });
+  if (!respRes.ok) return null;
+  const corpo = (await respRes.json()) as Record<string, { titular?: Record<string, unknown> }>;
+  const titular = (corpo[idReserva] ?? Object.values(corpo)[0])?.titular;
+  if (!titular) return null;
+
+  return {
+    id: pick(titular, 'idpessoa_cv', 'idpessoa_int') || `reserva-${idReserva}`,
+    nome: pick(titular, 'nome'),
+    cpf: pick(titular, 'documento'),
+    email: pick(titular, 'email'),
+    telefone: pick(titular, 'celular', 'telefone'),
+    createdAt: new Date().toISOString(),
+  };
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -173,6 +222,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: userData, error: userErr } = await auth.auth.getUser(jwt);
   if (userErr || !userData?.user) return json({ error: 'unauthorized' }, 401);
 
+  const url = new URL(req.url);
+
+  // Caminho principal: titular da reserva vigente da unidade.
+  const empreendimentoId = (url.searchParams.get('empreendimentoId') ?? '').trim();
+  const unidadeId = (url.searchParams.get('unidadeId') ?? '').trim();
+  if (/^\d+$/.test(empreendimentoId) && /^\d+$/.test(unidadeId)) {
+    try {
+      const titular = await titularDaUnidade(empreendimentoId, unidadeId);
+      if (titular) return json(titular, 200);
+    } catch (e) {
+      console.error('[crm-cliente] titular da unidade', e);
+    }
+    // Sem reserva/titular: segue para a busca por documento/nome, se houver.
+  }
+
   const baseUrl = Deno.env.get('CRM_API_PESSOAS_BASE_URL');
   const email = Deno.env.get('CRM_API_EMAIL');
   const senha = Deno.env.get('CRM_API_SENHA');
@@ -184,11 +248,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const url = new URL(req.url);
   const documento = (url.searchParams.get('documento') ?? '').replace(/\D/g, '');
   const nome = (url.searchParams.get('nome') ?? '').trim();
   if (!documento && !nome) {
-    return json({ error: 'Informe documento ou nome para localizar a pessoa' }, 400);
+    return json({ error: 'Pessoa não encontrada no CV (unidade sem reserva vigente)' }, 404);
   }
 
   // Monta o alvo a partir da base allow-listed + os filtros de busca.

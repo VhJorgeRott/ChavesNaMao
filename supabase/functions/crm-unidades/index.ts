@@ -9,9 +9,13 @@
 // controlado localmente no app; aqui só produzimos o baseline de venda
 // (DISPONIVEL/VENDIDA/EM_OBRAS).
 //
+// Endpoint: CRM_API_UNIDADES_BASE_URL, ou — se ausente — a origem de
+// CRM_API_BASE_URL + /api/v1/comercial/mapadisponibilidade (mesmo padrão do
+// crm-assistencias). O secret próprio nunca chegou a ser cadastrado em produção,
+// e a função falhava sempre com "não configurado".
+//
 // Deploy:
-//   supabase secrets set CRM_API_UNIDADES_BASE_URL=https://rottas.cvcrm.com.br/api/v1/comercial/mapadisponibilidade
-//   supabase functions deploy crm-unidades
+//   npx supabase functions deploy crm-unidades
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders: Record<string, string> = {
@@ -46,6 +50,7 @@ interface CrmUnidade {
   bloco?: string | null;
   etapa?: string | null;
   situacao?: string | null;
+  motivo_bloqueio?: string | null;
   area_privativa?: number | string | null;
 }
 
@@ -83,7 +88,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: userData, error: userErr } = await auth.auth.getUser(jwt);
   if (userErr || !userData?.user) return json({ error: 'unauthorized' }, 401);
 
-  const baseUrl = Deno.env.get('CRM_API_UNIDADES_BASE_URL');
+  const baseCrm = Deno.env.get('CRM_API_BASE_URL');
+  const baseUrl =
+    Deno.env.get('CRM_API_UNIDADES_BASE_URL') ??
+    (baseCrm ? `${new URL(baseCrm).origin}/api/v1/comercial/mapadisponibilidade` : null);
   const email = Deno.env.get('CRM_API_EMAIL');
   const token = Deno.env.get('CRM_API_TOKEN');
   if (!baseUrl || !email || !token) {
@@ -121,6 +129,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const agora = new Date().toISOString();
     const mapped = todas.map((u) => ({
       id: String(u.idunidade ?? u.idunidade_int ?? ''),
+      cvUnidadeId: String(u.idunidade ?? u.idunidade_int ?? ''),
+      situacaoCv: u.situacao?.trim() || null,
+      motivoBloqueioCv: u.motivo_bloqueio?.trim() || null,
       empreendimentoId,
       identificacao: identificacao(u) || String(u.unidade ?? u.idunidade ?? ''),
       status: mapSituacao(u.situacao),
