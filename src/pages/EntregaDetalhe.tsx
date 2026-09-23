@@ -33,6 +33,8 @@ import { EtapaTimeline } from '@/components/entregas/EtapaTimeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CabecalhoSkeleton } from '@/components/shared/skeletons';
 import {
   Dialog,
   DialogContent,
@@ -48,7 +50,7 @@ import { fArea, fData, fDataHora, maskCpf } from '@chaves/domain/format';
 
 export function EntregaDetalhe(): React.JSX.Element {
   const { id = '' } = useParams();
-  const { state, actions } = useData();
+  const { state, actions, carregandoPersistidos } = useData();
   const { currentUser } = useSession();
   const navigate = useNavigate();
 
@@ -95,6 +97,7 @@ export function EntregaDetalhe(): React.JSX.Element {
     };
   }, [id, entregaExiste, dicaCliente, sincronizarDadosEntrega]);
 
+  if (!detalhe && carregandoPersistidos) return <EntregaDetalheSkeleton />;
   if (!detalhe) {
     return (
       <div className="mx-auto w-full max-w-[1400px] px-6 py-16 text-center">
@@ -280,25 +283,28 @@ export function EntregaDetalhe(): React.JSX.Element {
   return (
     <>
       {/* Header */}
-      <header className="border-b border-border bg-card px-4 py-4 safe-px md:px-8">
+      <header className="border-b border-border bg-card px-4 py-3 safe-px md:px-8">
         <div className="mx-auto max-w-[1400px]">
-          {/* Volta para a lista de unidades do empreendimento — é de lá que a
-              entrega é iniciada. Sem empreendimento resolvido, cai no índice. */}
-          <Link
-            to={unidade ? `/unidades/${unidade.empreendimentoId}` : '/unidades'}
-            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {empreendimento?.nome ?? 'Unidades'}
-          </Link>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
-                {unidade?.identificacao}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {empreendimento?.nome} · {cliente?.nome}
-              </p>
+            <div className="flex items-center gap-2">
+              {/* Volta para a lista de unidades do empreendimento — é de lá que a
+                  entrega é iniciada. Sem empreendimento resolvido, cai no índice. */}
+              <Button variant="ghost" size="icon" asChild>
+                <Link
+                  to={unidade ? `/unidades/${unidade.empreendimentoId}` : '/unidades'}
+                  aria-label={`Voltar para ${empreendimento?.nome ?? 'Unidades'}`}
+                >
+                  <ArrowLeft />
+                </Link>
+              </Button>
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-foreground">
+                  {unidade?.identificacao}
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  {empreendimento?.nome} · {cliente?.nome}
+                </p>
+              </div>
             </div>
             <EntregaStatusBadge status={entrega.status} className="px-3 py-1 text-sm" />
           </div>
@@ -372,7 +378,9 @@ export function EntregaDetalhe(): React.JSX.Element {
                   <Info label="Empreendimento" value={empreendimento?.nome} />
                   <Info
                     label="Localização"
-                    value={empreendimento ? `${empreendimento.cidade}/${empreendimento.uf}` : undefined}
+                    value={
+                      empreendimento ? `${empreendimento.cidade}/${empreendimento.uf}` : undefined
+                    }
                   />
                   <Info label="Área" value={unidade ? fArea(unidade.areaM2) : undefined} />
                   {unidade?.inadimplente !== undefined && (
@@ -409,7 +417,11 @@ export function EntregaDetalhe(): React.JSX.Element {
                             sha256: {d.sha256Hash.slice(0, 24)}… · {fData(d.geradoEm)}
                           </p>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => void verDocumento(d.tipo)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void verDocumento(d.tipo)}
+                        >
                           <Download />
                           Baixar
                         </Button>
@@ -542,8 +554,8 @@ export function EntregaDetalhe(): React.JSX.Element {
           <DialogHeader>
             <DialogTitle>Link de assinatura gerado</DialogTitle>
             <DialogDescription>
-              Envie este link ao cliente. Ele expira em 72h, é de uso único e dá acesso apenas a esta
-              entrega.
+              Envie este link ao cliente. Ele expira em 72h, é de uso único e dá acesso apenas a
+              esta entrega.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
@@ -773,9 +785,10 @@ function AcaoEtapa({
       // Os dados de CRM/ERP chegam sozinhos ao abrir a entrega — enquanto isso
       // não termina, gerar o termo usaria um cadastro possivelmente defasado.
       return carregandoDados ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando dados do cliente e da unidade (CRM/ERP)…
+        <div className="space-y-3" aria-busy="true" aria-label="Carregando dados do CRM/ERP">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-10 w-full" />
         </div>
       ) : (
         <ActionRow
@@ -931,5 +944,44 @@ function ActionRow({
         {botao}
       </Button>
     </div>
+  );
+}
+
+function EntregaDetalheSkeleton(): React.JSX.Element {
+  const card = (linhas: number, key: number) => (
+    <Card key={key}>
+      <CardHeader>
+        <Skeleton className="h-5 w-28" />
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        {Array.from({ length: linhas }, (_, i) => (
+          <Skeleton key={i} className="h-4" style={{ width: `${90 - (i % 3) * 20}%` }} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+  return (
+    <>
+      <CabecalhoSkeleton voltar />
+      <div
+        className="mx-auto w-full max-w-[1400px] px-4 py-6 safe-px md:px-8 md:py-8"
+        aria-busy="true"
+      >
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6">
+            {card(6, 0)}
+            {card(3, 1)}
+          </div>
+          <div className="space-y-6 lg:col-span-2">
+            <div className="grid gap-6 sm:grid-cols-2">
+              {card(4, 2)}
+              {card(4, 3)}
+            </div>
+            {card(3, 4)}
+            {card(4, 5)}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
