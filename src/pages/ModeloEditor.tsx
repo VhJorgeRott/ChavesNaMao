@@ -224,7 +224,7 @@ export function ModeloEditor(): React.JSX.Element {
             <Card className="lg:sticky lg:top-6">
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Eye className="h-4 w-4 text-primary" />
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                   Pré-visualização
                 </CardTitle>
                 <Select value={previewUnidadeId} onValueChange={setPreviewUnidadeId}>

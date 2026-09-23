@@ -34,7 +34,7 @@ function Kpi({
     <Card className="rounded-xl">
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Icon className="h-5 w-5 text-primary" />
+          <Icon className="h-5 w-5" />
           <h3 className="text-sm font-semibold">{label}</h3>
         </div>
         <div className="flex items-end gap-2">

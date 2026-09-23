@@ -390,7 +390,7 @@ export function EntregaDetalhe(): React.JSX.Element {
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <FileText className="h-4 w-4 text-primary" />
+                  <FileText className="h-4 w-4 text-muted-foreground" />
                   Documentos
                 </CardTitle>
               </CardHeader>
@@ -424,7 +424,7 @@ export function EntregaDetalhe(): React.JSX.Element {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <PenLine className="h-4 w-4 text-primary" />
+                  <PenLine className="h-4 w-4 text-muted-foreground" />
                   Assinatura
                 </CardTitle>
               </CardHeader>
@@ -452,7 +452,7 @@ export function EntregaDetalhe(): React.JSX.Element {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <ClipboardList className="h-4 w-4 text-primary" />
+                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
                   Itens entregues
                 </CardTitle>
               </CardHeader>

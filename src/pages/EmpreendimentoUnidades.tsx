@@ -360,28 +360,24 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
         <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
           <KpiCard
             icon={Building2}
-            accent="hsl(var(--primary))"
             label="Unidades"
             value={metricas.total}
             tooltip="Total de unidades cadastradas no empreendimento, vendidas ou não."
           />
           <KpiCard
             icon={Tag}
-            accent="#8b5cf6"
             label="Vendidas"
             value={metricas.vendidas}
             tooltip="Unidades com status Vendida."
           />
           <KpiCard
             icon={DoorOpen}
-            accent="#3b82f6"
             label="Disponíveis"
             value={metricas.disponiveis}
             tooltip="Unidades ainda sem venda no CV."
           />
           <KpiCard
             icon={TriangleAlert}
-            accent="#ef4444"
             label="Inadimplentes"
             value={metricas.inadimplentes}
             carregando={carregandoInfo}
@@ -389,7 +385,6 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
           />
           <KpiCard
             icon={KeyRound}
-            accent="#f29f05"
             label="Entregas iniciadas"
             value={metricas.entregasIniciadas}
             tooltip="Unidades com uma entrega já em andamento."
@@ -600,14 +595,12 @@ function KpiCard({
   label,
   value,
   tooltip,
-  accent,
   carregando = false,
 }: {
   icon: LucideIcon;
   label: string;
   value: number;
   tooltip: string;
-  accent: string;
   carregando?: boolean;
 }): React.JSX.Element {
   return (
@@ -616,7 +609,7 @@ function KpiCard({
         <Card className="cursor-default rounded-xl text-left">
           <CardContent className="flex flex-col gap-3 p-5">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Icon className="h-5 w-5 shrink-0" style={{ color: accent }} />
+              <Icon className="h-5 w-5 shrink-0" />
               <h3 className="text-sm font-semibold">{label}</h3>
             </div>
             {carregando ? (

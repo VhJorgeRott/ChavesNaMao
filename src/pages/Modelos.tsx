@@ -64,7 +64,7 @@ export function Modelos(): React.JSX.Element {
                 <CardContent className="flex flex-1 flex-col gap-3 p-5">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold leading-tight text-foreground">{m.nome}</h3>
-                    <FileText className="h-5 w-5 shrink-0 text-primary" />
+                    <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                   </div>
                   <p className="line-clamp-3 flex-1 whitespace-pre-wrap text-xs text-muted-foreground">
                     {m.conteudo}

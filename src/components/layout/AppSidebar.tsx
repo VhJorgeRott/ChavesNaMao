@@ -66,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     titulo: 'Vistorias',
-    itens: [{ to: '/vistorias', label: 'Vistoria de unidades', icon: SearchCheck, emBreve: true }],
+    itens: [{ to: '/vistorias', label: 'Vistorias', icon: SearchCheck, emBreve: true }],
   },
   {
     titulo: 'Qualidade',

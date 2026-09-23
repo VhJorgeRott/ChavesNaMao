@@ -18,7 +18,7 @@ function Secao({
   return (
     <section>
       <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Icon className="h-4 w-4 text-primary" />
+        <Icon className="h-4 w-4 text-muted-foreground" />
         {titulo}
       </h3>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">{children}</dl>
@@ -83,7 +83,7 @@ export function ChamadoDetalheDialog({
 
             <section>
               <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <ClipboardList className="h-4 w-4 text-primary" />
+                <ClipboardList className="h-4 w-4 text-muted-foreground" />
                 Solicitação
               </h3>
               <Texto>{chamado.descricao || 'Sem descrição.'}</Texto>
@@ -92,7 +92,7 @@ export function ChamadoDetalheDialog({
             {chamado.parecerTecnico && (
               <section>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Wrench className="h-4 w-4 text-primary" />
+                  <Wrench className="h-4 w-4 text-muted-foreground" />
                   Parecer técnico
                 </h3>
                 <Texto>{chamado.parecerTecnico}</Texto>
