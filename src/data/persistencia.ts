@@ -184,7 +184,15 @@ export async function carregarCheckpoints(): Promise<CheckpointEntregas> {
       const unidadeId = uniRow?.external_ref;
       const empreendimentoId = empRow?.external_ref;
       const clienteId = cliRow?.external_ref;
-      if (!entregaId || !unidadeId || !empreendimentoId || !clienteId || !uniRow || !empRow || !cliRow) {
+      if (
+        !entregaId ||
+        !unidadeId ||
+        !empreendimentoId ||
+        !clienteId ||
+        !uniRow ||
+        !empRow ||
+        !cliRow
+      ) {
         continue;
       }
 
@@ -334,7 +342,8 @@ export async function salvarEntrega(dados: EntregaParaSalvar): Promise<void> {
   if (empErr) throw erroPostgrest('upsert de empreendimentos', empErr);
 
   // area_m2 aceita null desde 20240101000006, mas o check exige > 0 quando há valor.
-  const area = dados.unidade.areaM2 != null && dados.unidade.areaM2 > 0 ? dados.unidade.areaM2 : null;
+  const area =
+    dados.unidade.areaM2 != null && dados.unidade.areaM2 > 0 ? dados.unidade.areaM2 : null;
   const { data: uni, error: uniErr } = await sb
     .from('unidades')
     .upsert(
@@ -465,6 +474,8 @@ interface ModeloRow {
   external_ref: string | null;
   nome: string;
   conteudo: string;
+  tipo: ModeloTermo['tipo'];
+  modalidade: ModeloTermo['modalidade'];
   created_at: string;
   updated_at: string;
 }
@@ -475,13 +486,15 @@ export async function carregarModelos(): Promise<ModeloTermo[]> {
   try {
     const { data, error } = await getSupabase()
       .from('modelos')
-      .select('id, external_ref, nome, conteudo, created_at, updated_at')
+      .select('id, external_ref, nome, conteudo, tipo, modalidade, created_at, updated_at')
       .order('created_at', { ascending: true });
     if (error) throw erroPostgrest('leitura dos modelos', error);
     return ((data ?? []) as ModeloRow[]).map((m) => ({
       id: m.external_ref ?? m.id,
       nome: m.nome,
       conteudo: m.conteudo,
+      tipo: m.tipo,
+      modalidade: m.modalidade,
       createdAt: m.created_at,
       updatedAt: m.updated_at,
     }));
@@ -499,6 +512,8 @@ export async function salvarModelo(modelo: ModeloTermo): Promise<void> {
       external_ref: modelo.id,
       nome: modelo.nome,
       conteudo: modelo.conteudo,
+      tipo: modelo.tipo,
+      modalidade: modelo.modalidade,
     },
     { onConflict: 'external_ref' },
   );

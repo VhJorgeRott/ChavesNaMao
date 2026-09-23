@@ -333,9 +333,19 @@ export function createInitialState(): DbState {
   ];
 
   const itens: ItemEntrega[] = [
-    { id: 'item-0003-1', entregaId: 'ent-0003', descricao: 'Chave da porta principal', quantidade: 2 },
+    {
+      id: 'item-0003-1',
+      entregaId: 'ent-0003',
+      descricao: 'Chave da porta principal',
+      quantidade: 2,
+    },
     { id: 'item-0003-2', entregaId: 'ent-0003', descricao: 'Controle do portão', quantidade: 2 },
-    { id: 'item-0003-3', entregaId: 'ent-0003', descricao: 'Manual do proprietário', quantidade: 1 },
+    {
+      id: 'item-0003-3',
+      entregaId: 'ent-0003',
+      descricao: 'Manual do proprietário',
+      quantidade: 1,
+    },
   ];
 
   const tokens: AccessTokenRec[] = [
@@ -406,6 +416,8 @@ export function createInitialState(): DbState {
         id: 'mod-0001',
         nome: 'Termo de Entrega de Chaves (padrão)',
         conteudo: MODELO_PADRAO,
+        tipo: 'Entrega de chaves',
+        modalidade: 'Financiamento',
         createdAt: '2026-06-01T12:00:00Z',
         updatedAt: '2026-06-01T12:00:00Z',
       },
@@ -413,6 +425,8 @@ export function createInitialState(): DbState {
         id: 'mod-0002',
         nome: 'Termo de Confissão de Dívida (Venda Direta)',
         conteudo: MODELO_CONFISSAO_DIVIDA,
+        tipo: 'Confissão de dívida',
+        modalidade: 'Venda direta',
         createdAt: '2026-06-01T12:00:00Z',
         updatedAt: '2026-06-01T12:00:00Z',
       },
