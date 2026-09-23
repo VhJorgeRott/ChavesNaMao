@@ -41,7 +41,7 @@ export function UserAvatar({
     <div
       aria-hidden="true"
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground',
+        'flex shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-foreground',
         className,
       )}
     >
