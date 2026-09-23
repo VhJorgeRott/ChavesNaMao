@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, KeyRound } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { Logo } from '@/components/shared/Logo';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -22,9 +23,7 @@ export function LegalLayout({
       <header className="border-b border-border bg-card px-4 py-4 safe-px md:px-8">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <KeyRound className="h-5 w-5" />
-            </div>
+            <Logo className="h-9 w-9" />
             <div className="leading-tight">
               <p className="text-sm font-bold text-foreground">Chaves na Mão</p>
               <p className="text-[11px] text-muted-foreground">Rottas</p>

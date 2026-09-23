@@ -13,7 +13,7 @@ export default defineConfig({
     // integrações NÃO são cacheadas — são de outra origem e sempre ao vivo.
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icone.svg'],
+      includeAssets: ['logo-chaves-na-mao.png', 'logo-maskable-512.png'],
       manifest: {
         name: 'Chaves na Mão',
         short_name: 'Chaves na Mão',
@@ -21,10 +21,18 @@ export default defineConfig({
         lang: 'pt-BR',
         start_url: '/',
         display: 'standalone',
-        background_color: '#f5f5f4',
-        theme_color: '#f59229',
+        background_color: '#f5f5f5',
+        theme_color: '#f29f05',
         icons: [
-          { src: '/icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: '/logo-chaves-na-mao.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // Separado do 'any': o logo é transparente e vai até a borda, então
+          // o recorte circular do Android cortaria a chave. Este tem placa branca.
+          {
+            src: '/logo-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {

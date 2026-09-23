@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, KeyRound, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Logo } from '@/components/shared/Logo';
 import { useData } from '@/data/DataProvider';
 import type { PortalDelivery } from '@/adapters/types';
 import { SignatureCanvas, type SignatureCanvasHandle } from '@/components/portal/SignatureCanvas';
@@ -53,9 +54,7 @@ export function Portal(): React.JSX.Element {
       {/* Topbar */}
       <header className="border-b border-border bg-card px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <KeyRound className="h-4 w-4" />
-          </div>
+          <Logo className="h-8 w-8" />
           <div className="leading-tight">
             <p className="text-sm font-bold text-foreground">Chaves na Mão</p>
             <p className="text-[11px] text-muted-foreground">Portal de assinatura · Rottas</p>
@@ -100,12 +99,17 @@ export function Portal(): React.JSX.Element {
               </p>
               <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Linha rotulo="Cliente" valor={delivery.cliente.nome || undefined} />
-                <Linha rotulo="CPF" valor={delivery.cliente.cpf ? maskCpf(delivery.cliente.cpf) : undefined} />
+                <Linha
+                  rotulo="CPF"
+                  valor={delivery.cliente.cpf ? maskCpf(delivery.cliente.cpf) : undefined}
+                />
                 <Linha rotulo="Unidade" valor={delivery.unidade.identificacao || undefined} />
                 <Linha rotulo="Empreendimento" valor={delivery.empreendimento.nome || undefined} />
                 <Linha
                   rotulo="Área"
-                  valor={delivery.unidade.areaM2 != null ? fArea(delivery.unidade.areaM2) : undefined}
+                  valor={
+                    delivery.unidade.areaM2 != null ? fArea(delivery.unidade.areaM2) : undefined
+                  }
                 />
               </dl>
             </div>
@@ -175,7 +179,13 @@ export function Portal(): React.JSX.Element {
   );
 }
 
-function Linha({ rotulo, valor }: { rotulo: string; valor: string | undefined }): React.JSX.Element {
+function Linha({
+  rotulo,
+  valor,
+}: {
+  rotulo: string;
+  valor: string | undefined;
+}): React.JSX.Element {
   return (
     <div className="flex justify-between gap-3 border-b border-border/50 pb-1.5">
       <dt className="text-muted-foreground">{rotulo}</dt>
