@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { CartoesSkeleton } from '@/components/shared/skeletons';
 import {
   agoraIso,
   novoId,
@@ -208,11 +208,7 @@ export function Pendencias(): React.JSX.Element {
         </div>
 
         {carregando ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }, (_, i) => (
-              <Skeleton key={i} className="h-20" />
-            ))}
-          </div>
+          <CartoesSkeleton />
         ) : filtradas.length === 0 ? (
           <Card>
             <CardContent className="p-6">
