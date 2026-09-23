@@ -21,7 +21,9 @@ function Secao({
         <Icon className="h-4 w-4 text-muted-foreground" />
         {titulo}
       </h3>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">{children}</dl>
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-6 gap-y-2.5">
+        {children}
+      </dl>
     </section>
   );
 }
@@ -36,14 +38,14 @@ function Info({
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="break-words text-sm text-foreground">{value || '-'}</dd>
+      <dd className="text-sm text-foreground [overflow-wrap:anywhere]">{value || '-'}</dd>
     </div>
   );
 }
 
 function Texto({ children }: { children: string }): React.JSX.Element {
   return (
-    <p className="whitespace-pre-line rounded-lg bg-muted/50 p-3 text-sm text-foreground">
+    <p className="whitespace-pre-line rounded-[10px] bg-muted/50 p-3 text-sm leading-normal text-foreground">
       {children}
     </p>
   );
@@ -58,7 +60,7 @@ export function ChamadoDetalheDialog({
 }): React.JSX.Element {
   return (
     <Dialog open={chamado !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[calc(100vh-48px)] max-w-2xl overflow-y-auto sm:rounded-2xl">
         {chamado && (
           <>
             <DialogHeader>

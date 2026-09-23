@@ -62,6 +62,14 @@ const paginaSchema = z.object({
       qtd: z.number(),
     })
     .array(),
+  facetas: z
+    .object({
+      empreendimento: z.record(z.number()),
+      periodo: z.object({ todos: z.number(), hoje: z.number(), '7': z.number(), '30': z.number() }),
+      local: z.object({ todos: z.number(), unidade: z.number(), area: z.number() }),
+      descricao: z.object({ todos: z.number(), com: z.number(), sem: z.number() }),
+    })
+    .optional(),
   empreendimentos: z.object({ id: z.string(), nome: z.string() }).array(),
   atualizadoEm: z.string(),
 }) satisfies z.ZodType<PaginaChamados>;

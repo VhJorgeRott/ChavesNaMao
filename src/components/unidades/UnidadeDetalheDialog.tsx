@@ -76,7 +76,7 @@ async function buscarChamados(empreendimentoId: string, unidadeId: string): Prom
   const porFluxo = async (fluxo: FluxoAssistencia) => {
     const pagina = await adapters.assistencia.listarChamados({
       fluxo,
-      empreendimentoId,
+      empreendimentoIds: [empreendimentoId],
       unidadeId,
       porPagina: 100,
     });

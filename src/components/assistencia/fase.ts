@@ -1,14 +1,9 @@
 import type { FaseChamado } from '@/adapters/types';
 
-export const FASE_META: Record<FaseChamado, { label: string; classe: string }> = {
-  nova: { label: 'Novas', classe: 'border-transparent bg-primary text-primary-foreground' },
-  andamento: { label: 'Em andamento', classe: 'border-transparent bg-sky-100 text-sky-800' },
-  improcedente: {
-    label: 'Improcedentes',
-    classe: 'border-transparent bg-muted text-muted-foreground',
-  },
-  finalizado: {
-    label: 'Finalizadas',
-    classe: 'border-transparent bg-success text-success-foreground',
-  },
+/** Rótulo, cor do KPI (`dot`) e cores da pill de situação por fase. */
+export const FASE_META: Record<FaseChamado, { label: string; dot: string; bg: string; cor: string }> = {
+  nova: { label: 'Novas', dot: '#f29f05', bg: '#f29f05', cor: '#fff' },
+  andamento: { label: 'Em andamento', dot: '#3b82f6', bg: '#dbeafe', cor: '#1d4ed8' },
+  improcedente: { label: 'Improcedentes', dot: '#cbd5e1', bg: '#f1f5f9', cor: '#475569' },
+  finalizado: { label: 'Finalizadas', dot: '#22c55e', bg: 'rgba(34,197,94,.15)', cor: '#15803d' },
 };

@@ -58,7 +58,11 @@ export type {
   FaseChamado,
   FiltroChamados,
   FluxoAssistencia,
+  LocalChamado,
+  OrdemChamado,
   PaginaChamados,
+  PeriodoChamado,
+  DescricaoChamado,
   ResumoSituacao,
 } from '../../supabase/functions/_shared/assistencia.ts';
 
