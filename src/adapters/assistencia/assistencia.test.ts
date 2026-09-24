@@ -3,6 +3,7 @@ import {
   type ChamadoAssistencia,
   faseDoChamado,
   filtrarChamados,
+  type FiltroChamados,
   filtroDeQuery,
   interpretarSituacao,
   queryDoFiltro,
@@ -118,9 +119,74 @@ describe('filtrarChamados', () => {
     expect(r.itens).toHaveLength(1);
   });
 
-  it('filtro vai e volta pela query string', () => {
-    const filtro = { fase: 'abertos', empreendimentoId: '25', busca: 'porta', pagina: 2 } as const;
+  it('filtro vai e volta pela query string, com listas', () => {
+    const filtro: FiltroChamados = {
+      fase: 'abertos',
+      situacaoIds: ['6', '8'],
+      empreendimentoIds: ['25'],
+      busca: 'porta',
+      periodo: '7',
+      local: 'area',
+      descricao: 'sem',
+      ordem: 'local',
+      direcao: 'asc',
+      pagina: 2,
+    };
     expect(filtroDeQuery(new URLSearchParams(queryDoFiltro(filtro)))).toEqual(filtro);
+  });
+
+  it('aceita os parâmetros singulares antigos', () => {
+    expect(filtroDeQuery(new URLSearchParams('empreendimentoId=25&situacaoId=6'))).toEqual({
+      empreendimentoIds: ['25'],
+      situacaoIds: ['6'],
+    });
+  });
+
+  it('multi-seleção de situação e empreendimento', () => {
+    const r = filtrarChamados(todos, { situacaoIds: ['6', '8'] }, 'agora');
+    expect(r.itens.map((c) => c.id)).toEqual(['2', '3']);
+    const e = filtrarChamados(todos, { empreendimentoIds: ['17', 'x'] }, 'agora');
+    expect(e.itens.map((c) => c.id)).toEqual(['5']);
+  });
+
+  it('período usa o "hoje" informado', () => {
+    const r = filtrarChamados(todos, { periodo: 'hoje' }, 'agora', '2026-09-02');
+    expect(r.itens.map((c) => c.id)).toEqual(['3']);
+    const s = filtrarChamados(todos, { periodo: '7' }, 'agora', '2026-09-02');
+    expect(s.itens.map((c) => c.id)).toEqual(['3', '5', '1']);
+    expect(s.facetas?.periodo).toMatchObject({ todos: 4, hoje: 1, '7': 3, '30': 3 });
+  });
+
+  it('local: área comum por área preenchida ou bloco A.C', () => {
+    const lista = [
+      chamado({ id: '10', areaComum: 'Piscina' }),
+      chamado({ id: '11', bloco: 'A.C' }),
+      chamado({ id: '12', bloco: 'B', unidade: { id: '1', nome: '101', codigoInterno: null } }),
+    ];
+    expect(filtrarChamados(lista, { local: 'area' }, 'agora').total).toBe(2);
+    expect(filtrarChamados(lista, { local: 'unidade' }, 'agora').itens.map((c) => c.id)).toEqual([
+      '12',
+    ]);
+  });
+
+  it('facetas ignoram o próprio filtro e aplicam os demais', () => {
+    const r = filtrarChamados(todos, { empreendimentoIds: ['17'], descricao: 'com' }, 'agora');
+    expect(r.total).toBe(1);
+    // Empreendimento: só o filtro de descrição vale → só o 5 tem descrição.
+    expect(r.facetas?.empreendimento).toEqual({ '17': 1 });
+    // Descrição: só o filtro de empreendimento vale → o 5.
+    expect(r.facetas?.descricao).toEqual({ todos: 1, com: 1, sem: 0 });
+    // KPIs aplicam os dois filtros.
+    expect(r.porFase).toEqual({ nova: 1, andamento: 0, improcedente: 0, finalizado: 0 });
+  });
+
+  it('ordena por coluna e direção; solicitação vazia fica por último', () => {
+    const asc = filtrarChamados(todos, { ordem: 'data', direcao: 'asc' }, 'agora');
+    expect(asc.itens.map((c) => c.id)).toEqual(['5', '1', '3', '2']);
+    const sit = filtrarChamados(todos, { ordem: 'situacao', direcao: 'desc' }, 'agora');
+    expect(sit.itens[0]?.id).toBe('2');
+    const desc = filtrarChamados(todos, { ordem: 'descricao', direcao: 'desc' }, 'agora');
+    expect(desc.itens[0]?.id).toBe('5');
   });
 });
 

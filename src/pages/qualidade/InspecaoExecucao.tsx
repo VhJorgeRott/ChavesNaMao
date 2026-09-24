@@ -13,6 +13,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   type InspecaoFvs,
@@ -348,8 +349,32 @@ export function InspecaoExecucao(): React.JSX.Element {
   }
   if (!insp || !progresso) {
     return (
-      <div className="flex flex-1 items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="flex flex-1 flex-col" aria-busy="true">
+        <header className="border-b border-border bg-card px-4 py-3 safe-px md:px-8">
+          <div className="mx-auto flex max-w-3xl flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-9 shrink-0 rounded-[10px]" />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+              <Skeleton className="h-6 w-24 rounded-full" />
+            </div>
+            <Skeleton className="h-2 w-full rounded-full" />
+          </div>
+        </header>
+        <div className="mx-auto w-full max-w-3xl space-y-3 px-4 py-6 safe-px md:px-8">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <Skeleton className="h-4" style={{ width: `${75 - (i % 3) * 15}%` }} />
+              <div className="flex gap-2">
+                <Skeleton className="h-9 flex-1" />
+                <Skeleton className="h-9 flex-1" />
+                <Skeleton className="h-9 flex-1" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

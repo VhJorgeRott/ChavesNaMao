@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { KeyRound, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
+import { Logo } from '@/components/shared/Logo';
 import { useAuth } from '@/auth/SessionProvider';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,13 +31,9 @@ export function Login(): React.JSX.Element {
     <div className="flex min-h-screen flex-col items-center justify-center bg-page-bg px-4">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-            <KeyRound className="h-6 w-6" />
-          </div>
+          <Logo className="mb-3 h-12 w-12" />
           <h1 className="text-xl font-bold tracking-tight text-foreground">Chaves na Mão</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Acesso restrito à equipe da Rottas
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Acesso restrito à equipe da Rottas</p>
         </div>
 
         {error && (

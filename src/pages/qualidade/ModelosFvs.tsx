@@ -62,8 +62,16 @@ export function ModelosFvs(): React.JSX.Element {
       <PageContent>
         {carregando ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton key={i} className="h-28" />
+            {Array.from({ length: 6 }, (_, i) => (
+              <div
+                key={i}
+                aria-busy="true"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4"
+              >
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-3.5 w-2/5" />
+                <Skeleton className="mt-2 h-3 w-4/5" />
+              </div>
             ))}
           </div>
         ) : (modelos ?? []).length === 0 ? (

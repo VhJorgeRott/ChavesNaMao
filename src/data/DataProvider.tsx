@@ -25,11 +25,7 @@ import {
   TIPO_DOCUMENTO,
   type Unidade,
 } from '@chaves/domain/types';
-import type {
-  PortalAssinarResult,
-  PortalResolveResult,
-  PortalSnapshot,
-} from '@/adapters/types';
+import type { PortalAssinarResult, PortalResolveResult, PortalSnapshot } from '@/adapters/types';
 import { hashToken } from '@/lib/token';
 import { logAtividade } from '@/lib/atividade';
 import { createInitialState, type DbState } from './seed';
@@ -180,18 +176,19 @@ export interface DataActions {
     geo: { lat: number; lng: number } | null,
   ): Promise<PortalAssinarResult>;
   definirPapel(userId: string, papel: 'admin' | 'equipe_entrega', actorId: string): void;
-  criarModelo(nome: string, conteudo: string, actorId: string): Promise<string>;
-  atualizarModelo(
-    id: string,
-    dados: { nome: string; conteudo: string },
-    actorId: string,
-  ): Promise<void>;
+  criarModelo(dados: DadosModelo, actorId: string): Promise<string>;
+  atualizarModelo(id: string, dados: DadosModelo, actorId: string): Promise<void>;
   removerModelo(id: string, actorId: string): void;
 }
+
+/** Campos editáveis de um modelo de termo. */
+export type DadosModelo = Pick<ModeloTermo, 'nome' | 'conteudo' | 'tipo' | 'modalidade'>;
 
 interface DataContextValue {
   state: DbState;
   actions: DataActions;
+  /** Entregas e modelos do servidor ainda não chegaram (telas mostram skeleton). */
+  carregandoPersistidos: boolean;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -201,7 +198,7 @@ const DataContext = createContext<DataContextValue | null>(null);
  * revalidado ao abrir a tela. Abaixo disso servimos direto do cache — é o que
  * elimina a espera a cada visita. O prefetch pós-login mantém tudo aquecido.
  */
-const TTL_CATALOGO_MS = 15 * 60 * 1000;
+const TTL_CATALOGO_MS = 2 * 60 * 60 * 1000;
 
 /** Chave reservada em `sincronizadoEm` para a lista de empreendimentos. */
 const CHAVE_EMPREENDIMENTOS = '__empreendimentos__';
@@ -230,6 +227,8 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   // capturar `state` no closure, evitando dados defasados entre renders.
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  const [carregandoPersistidos, setCarregandoPersistidos] = useState(persistenciaAtiva);
 
   // Espelha o catálogo no localStorage sempre que ele muda.
   useEffect(() => {
@@ -323,42 +322,46 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   // da equipe ou de outra sessão. Chamado uma vez, após a autenticação.
   const carregarPersistidos = useCallback(async (): Promise<void> => {
     if (!persistenciaAtiva) return;
+    try {
+      // Modelos vêm do servidor e VENCEM os do seed: são o texto que vai à
+      // assinatura, e o seed é só um ponto de partida para quem roda sem backend.
+      const modelos = await carregarModelos();
+      if (modelos.length > 0) setState((s) => ({ ...s, modelos }));
 
-    // Modelos vêm do servidor e VENCEM os do seed: são o texto que vai à
-    // assinatura, e o seed é só um ponto de partida para quem roda sem backend.
-    const modelos = await carregarModelos();
-    if (modelos.length > 0) setState((s) => ({ ...s, modelos }));
-
-    const ck = await carregarCheckpoints();
-    if (ck.entregas.length === 0) return;
-    setState((s) => {
-      const mesclar = <T extends { id: string }>(locais: T[], remotos: T[]): T[] => {
-        const ids = new Set(remotos.map((r) => r.id));
-        return [...locais.filter((l) => !ids.has(l.id)), ...remotos];
-      };
-      const entregas = mesclar(s.entregas, ck.entregas);
-      return {
-        ...s,
-        empreendimentos: mesclar(s.empreendimentos, ck.empreendimentos),
-        unidades: mesclar(s.unidades, ck.unidades),
-        clientes: mesclar(s.clientes, ck.clientes),
-        entregas,
-        documentos: mesclar(s.documentos, ck.documentos),
-        // Itens: o servidor é a verdade para as entregas que ele conhece, senão
-        // um item removido em outra sessão ressuscitaria a partir do local.
-        itens: [
-          ...s.itens.filter((i) => !ck.entregas.some((e) => e.id === i.entregaId)),
-          ...ck.itens,
-        ],
-        // Mesma regra dos itens: para as entregas que o servidor conhece, ele
-        // manda. É o que faz a confissão já assinada continuar assinada depois
-        // de um refresh, em vez de a etapa reabrir.
-        assinaturas: [
-          ...s.assinaturas.filter((a) => !ck.entregas.some((e) => e.id === a.entregaId)),
-          ...ck.assinaturas,
-        ],
-      };
-    });
+      const ck = await carregarCheckpoints();
+      if (ck.entregas.length > 0) {
+        setState((s) => {
+          const mesclar = <T extends { id: string }>(locais: T[], remotos: T[]): T[] => {
+            const ids = new Set(remotos.map((r) => r.id));
+            return [...locais.filter((l) => !ids.has(l.id)), ...remotos];
+          };
+          const entregas = mesclar(s.entregas, ck.entregas);
+          return {
+            ...s,
+            empreendimentos: mesclar(s.empreendimentos, ck.empreendimentos),
+            unidades: mesclar(s.unidades, ck.unidades),
+            clientes: mesclar(s.clientes, ck.clientes),
+            entregas,
+            documentos: mesclar(s.documentos, ck.documentos),
+            // Itens: o servidor é a verdade para as entregas que ele conhece, senão
+            // um item removido em outra sessão ressuscitaria a partir do local.
+            itens: [
+              ...s.itens.filter((i) => !ck.entregas.some((e) => e.id === i.entregaId)),
+              ...ck.itens,
+            ],
+            // Mesma regra dos itens: para as entregas que o servidor conhece, ele
+            // manda. É o que faz a confissão já assinada continuar assinada depois
+            // de um refresh, em vez de a etapa reabrir.
+            assinaturas: [
+              ...s.assinaturas.filter((a) => !ck.entregas.some((e) => e.id === a.entregaId)),
+              ...ck.assinaturas,
+            ],
+          };
+        });
+      }
+    } finally {
+      setCarregandoPersistidos(false);
+    }
   }, []);
 
   // Resolve o cliente de uma unidade. No live, `getClienteByUnidade` do CV CRM
@@ -463,7 +466,8 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
       let cliente: Cliente;
       if (ativa) {
         entregaId = ativa.id;
-        cliente = s0.clientes.find((c) => c.id === ativa.clienteId) ?? (await resolverCliente(unidadeId));
+        cliente =
+          s0.clientes.find((c) => c.id === ativa.clienteId) ?? (await resolverCliente(unidadeId));
       } else {
         cliente = await resolverCliente(unidadeId);
         entregaId = nextId('ent');
@@ -571,34 +575,31 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   // (QUITADA/LIBERADA/ENTREGUE) é controlado no app: quando uma unidade local
   // já avançou nesse ciclo, ou tem uma entrega em andamento, preservamos o
   // status local em vez de sobrescrever com o do CV.
-  const sincronizarUnidades = useCallback(
-    (empreendimentoId: string, novas: Unidade[]): void => {
-      const CICLO_ENTREGA: readonly Unidade['status'][] = ['QUITADA', 'LIBERADA', 'ENTREGUE'];
-      setState((s) => {
-        const outros = s.unidades.filter((u) => u.empreendimentoId !== empreendimentoId);
-        const locais = new Map(
-          s.unidades
-            .filter((u) => u.empreendimentoId === empreendimentoId)
-            .map((u) => [u.id, u] as const),
-        );
-        const idsNovas = new Set(novas.map((n) => n.id));
-        const merged = novas.map((nova) => {
-          const local = locais.get(nova.id);
-          if (local && (CICLO_ENTREGA.includes(local.status) || local.status === 'ENTREGUE')) {
-            return { ...nova, status: local.status };
-          }
-          return nova;
-        });
-        // Preserva unidades locais deste empreendimento que têm entrega em
-        // andamento e não vieram na resposta do CV (para não sumir do fluxo).
-        const comEntrega = [...locais.values()].filter(
-          (u) => !idsNovas.has(u.id) && s.entregas.some((e) => e.unidadeId === u.id),
-        );
-        return { ...s, unidades: [...outros, ...merged, ...comEntrega] };
+  const sincronizarUnidades = useCallback((empreendimentoId: string, novas: Unidade[]): void => {
+    const CICLO_ENTREGA: readonly Unidade['status'][] = ['QUITADA', 'LIBERADA', 'ENTREGUE'];
+    setState((s) => {
+      const outros = s.unidades.filter((u) => u.empreendimentoId !== empreendimentoId);
+      const locais = new Map(
+        s.unidades
+          .filter((u) => u.empreendimentoId === empreendimentoId)
+          .map((u) => [u.id, u] as const),
+      );
+      const idsNovas = new Set(novas.map((n) => n.id));
+      const merged = novas.map((nova) => {
+        const local = locais.get(nova.id);
+        if (local && (CICLO_ENTREGA.includes(local.status) || local.status === 'ENTREGUE')) {
+          return { ...nova, status: local.status };
+        }
+        return nova;
       });
-    },
-    [],
-  );
+      // Preserva unidades locais deste empreendimento que têm entrega em
+      // andamento e não vieram na resposta do CV (para não sumir do fluxo).
+      const comEntrega = [...locais.values()].filter(
+        (u) => !idsNovas.has(u.id) && s.entregas.some((e) => e.unidadeId === u.id),
+      );
+      return { ...s, unidades: [...outros, ...merged, ...comEntrega] };
+    });
+  }, []);
 
   // Persiste (upsert) empreendimentos vindos do CRM. Sem isso, as telas de
   // entrega não resolvem o empreendimento da unidade (fica "-"), pois o estado
@@ -1161,20 +1162,20 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
   // assinar, e a Edge Function que gera o PDF lê do servidor. Se a gravação
   // falhar, a edição não pode parecer salva só na tela de quem editou.
   const criarModelo = useCallback(
-    async (nome: string, conteudo: string, actorId: string): Promise<string> => {
+    async (dados: DadosModelo, actorId: string): Promise<string> => {
       const id = nextId('mod');
       const agora = new Date().toISOString();
-      const modelo: ModeloTermo = { id, nome, conteudo, createdAt: agora, updatedAt: agora };
+      const modelo: ModeloTermo = { id, ...dados, createdAt: agora, updatedAt: agora };
       await salvarModelo(modelo);
       setState((s) => ({ ...s, modelos: [...s.modelos, modelo] }));
-      pushAudit(actorId, 'MODELO_CRIADO', 'modelo', id, { nome });
+      pushAudit(actorId, 'MODELO_CRIADO', 'modelo', id, { nome: dados.nome });
       return id;
     },
     [pushAudit],
   );
 
   const atualizarModelo = useCallback(
-    async (id: string, dados: { nome: string; conteudo: string }, actorId: string): Promise<void> => {
+    async (id: string, dados: DadosModelo, actorId: string): Promise<void> => {
       const atual = stateRef.current.modelos.find((m) => m.id === id);
       if (!atual) throw new Error('Modelo não encontrado');
       const atualizado: ModeloTermo = { ...atual, ...dados, updatedAt: new Date().toISOString() };
@@ -1246,7 +1247,10 @@ export function DataProvider({ children }: { children: ReactNode }): React.JSX.E
     ],
   );
 
-  const value = useMemo<DataContextValue>(() => ({ state, actions }), [state, actions]);
+  const value = useMemo<DataContextValue>(
+    () => ({ state, actions, carregandoPersistidos }),
+    [state, actions, carregandoPersistidos],
+  );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

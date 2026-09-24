@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { Activity, ChevronLeft, ChevronRight, History, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { adapters, type AtividadeFiltro } from '@/adapters';
 import type { AppUser, AuditEntry } from '@chaves/domain/types';
@@ -19,12 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { comCache, lerCache, limparCache } from '@/lib/cache-memoria';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -37,17 +33,19 @@ import { fDataHora } from '@chaves/domain/format';
 const TODOS = '__todos__';
 const TIPOS: TipoAtividade[] = ['login', 'navegacao', 'acao'];
 const TAMANHO = 20;
+const CHAVE_USUARIOS = 'atividade:usuarios';
 
 export function Atividade(): React.JSX.Element {
-  const [usuarios, setUsuarios] = useState<AppUser[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  // Parte do cache (2h): voltar à tela não refaz a consulta. O botão Atualizar força.
+  const [usuarios, setUsuarios] = useState<AppUser[]>(() => lerCache(CHAVE_USUARIOS) ?? []);
+  const [carregando, setCarregando] = useState(() => lerCache(CHAVE_USUARIOS) === undefined);
   const [selecionado, setSelecionado] = useState<AppUser | null>(null);
+  const [versao, setVersao] = useState(0);
 
   useEffect(() => {
     let ativo = true;
-    setCarregando(true);
-    void adapters.admin
-      .getUsuarios()
+    if (lerCache(CHAVE_USUARIOS) === undefined) setCarregando(true);
+    void comCache(CHAVE_USUARIOS, () => adapters.admin.getUsuarios())
       .then((us) => ativo && setUsuarios(us))
       .catch((e) => {
         if (ativo) toast.error(e instanceof Error ? e.message : 'Falha ao carregar os usuários');
@@ -56,7 +54,7 @@ export function Atividade(): React.JSX.Element {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [versao]);
 
   return (
     <>
@@ -64,6 +62,19 @@ export function Atividade(): React.JSX.Element {
         icon={Activity}
         titulo="Atividade"
         subtitulo="Usuários da plataforma. Clique em um usuário para ver o histórico dele."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => {
+              limparCache('atividade:');
+              setVersao((v) => v + 1);
+            }}
+            disabled={carregando}
+          >
+            <RefreshCw className={carregando ? 'animate-spin' : undefined} />
+            Atualizar
+          </Button>
+        }
       />
       <PageContent>
         <Card className="overflow-hidden">
@@ -73,16 +84,37 @@ export function Atividade(): React.JSX.Element {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Usuário</th>
                   <th className="px-4 py-3 text-left font-medium">Papel</th>
-                  <th className="px-4 py-3 text-left font-medium max-md:hidden">Última atividade</th>
+                  <th className="px-4 py-3 text-left font-medium max-md:hidden">
+                    Última atividade
+                  </th>
                   <th className="px-4 py-3 text-right font-medium">Atividade</th>
                 </tr>
               </thead>
               <tbody>
                 {carregando ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <tr key={i} className="border-b border-border/60 last:border-0">
-                      <td className="px-4 py-3" colSpan={4}>
-                        <Skeleton className="h-8 w-full" />
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr
+                      key={i}
+                      aria-busy="true"
+                      className="border-b border-border/60 last:border-0"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                          <div className="flex flex-col gap-1.5">
+                            <Skeleton className="h-4 w-36" />
+                            <Skeleton className="h-3 w-48" />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                      </td>
+                      <td className="px-4 py-3 max-md:hidden">
+                        <Skeleton className="h-4 w-28" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <Skeleton className="ml-auto h-8 w-28" />
                       </td>
                     </tr>
                   ))
@@ -162,10 +194,6 @@ function PainelAtividade({ usuario }: { usuario: AppUser }): React.JSX.Element {
   const [dataAte, setDataAte] = useState('');
   const [pagina, setPagina] = useState(0);
 
-  const [itens, setItens] = useState<AuditEntry[]>([]);
-  const [temMais, setTemMais] = useState(false);
-  const [carregando, setCarregando] = useState(true);
-
   // Filtros derivados para o fetch — chaves ausentes são omitidas (não `undefined`,
   // por causa do exactOptionalPropertyTypes).
   const filtro = useMemo<AtividadeFiltro>(() => {
@@ -177,12 +205,17 @@ function PainelAtividade({ usuario }: { usuario: AppUser }): React.JSX.Element {
     if (dataAte) f.dataAte = `${dataAte}T23:59:59.999`;
     return f;
   }, [usuario.id, tipo, rota, dataDe, dataAte, pagina]);
+  const chave = `atividade:${JSON.stringify(filtro)}`;
+
+  const inicial = lerCache<{ itens: AuditEntry[]; temMais: boolean }>(chave);
+  const [itens, setItens] = useState<AuditEntry[]>(inicial?.itens ?? []);
+  const [temMais, setTemMais] = useState(inicial?.temMais ?? false);
+  const [carregando, setCarregando] = useState(inicial === undefined);
 
   useEffect(() => {
     let ativo = true;
-    setCarregando(true);
-    void adapters.admin
-      .getAtividade(filtro)
+    if (lerCache(chave) === undefined) setCarregando(true);
+    void comCache(chave, () => adapters.admin.getAtividade(filtro))
       .then((res) => {
         if (!ativo) return;
         setItens(res.itens);
@@ -195,7 +228,7 @@ function PainelAtividade({ usuario }: { usuario: AppUser }): React.JSX.Element {
     return () => {
       ativo = false;
     };
-  }, [filtro]);
+  }, [chave, filtro]);
 
   // Qualquer troca de filtro volta para a primeira página.
   function comReset<T>(setter: (v: T) => void): (v: T) => void {
@@ -209,7 +242,11 @@ function PainelAtividade({ usuario }: { usuario: AppUser }): React.JSX.Element {
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-3">
-          <UserAvatar nome={usuario.nome} avatarUrl={usuario.avatarUrl} className="h-9 w-9 text-[11px]" />
+          <UserAvatar
+            nome={usuario.nome}
+            avatarUrl={usuario.avatarUrl}
+            className="h-9 w-9 text-[11px]"
+          />
           <div className="min-w-0">
             <p className="truncate">{usuario.nome}</p>
             <p className="truncate text-xs font-normal text-muted-foreground">{usuario.email}</p>
@@ -232,25 +269,37 @@ function PainelAtividade({ usuario }: { usuario: AppUser }): React.JSX.Element {
             ))}
           </SelectContent>
         </Select>
-        <SearchInput value={rota} onChange={comReset(setRota)} placeholder="Buscar por tela/rota..." />
+        <SearchInput
+          value={rota}
+          onChange={comReset(setRota)}
+          placeholder="Buscar por tela/rota..."
+        />
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           De
           <Input type="date" value={dataDe} onChange={(e) => comReset(setDataDe)(e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           Até
-          <Input type="date" value={dataAte} onChange={(e) => comReset(setDataAte)(e.target.value)} />
+          <Input
+            type="date"
+            value={dataAte}
+            onChange={(e) => comReset(setDataAte)(e.target.value)}
+          />
         </label>
       </div>
 
       {/* Feed */}
       <div className="max-h-[45vh] min-h-[220px] overflow-y-auto rounded-lg border border-border">
         {carregando ? (
-          <div className="space-y-3 p-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-11 w-full" />
+          <ul className="divide-y divide-border" aria-busy="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <li key={i} className="flex items-center gap-3 px-3 py-2.5">
+                <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                <Skeleton className="h-4 flex-1" style={{ maxWidth: `${70 - (i % 3) * 12}%` }} />
+                <Skeleton className="ml-auto h-3 w-24" />
+              </li>
             ))}
-          </div>
+          </ul>
         ) : itens.length === 0 ? (
           <EmptyState
             icon={History}

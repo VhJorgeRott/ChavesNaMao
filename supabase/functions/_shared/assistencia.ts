@@ -13,7 +13,12 @@ export type FluxoAssistencia = 'ASSISTENCIA_TECNICA' | 'ENTREGA_CHAVES' | 'OUTRO
 /** Fase de alto nível do chamado, derivada da etapa do fluxo. */
 export type FaseChamado = 'nova' | 'andamento' | 'improcedente' | 'finalizado';
 
-export const FASES_CHAMADO: readonly FaseChamado[] = ['nova', 'andamento', 'improcedente', 'finalizado'];
+export const FASES_CHAMADO: readonly FaseChamado[] = [
+  'nova',
+  'andamento',
+  'improcedente',
+  'finalizado',
+];
 
 export interface ChamadoAssistencia {
   id: string;
@@ -71,7 +76,11 @@ export function interpretarSituacao(bruta: string): {
  * 05 improcedente · 06 procedente · 07 reparo em andamento · 08 emissão da OS ·
  * 09 reparo finalizado.
  */
-export function faseDoChamado(fluxo: FluxoAssistencia, etapa: number | null, nome: string): FaseChamado {
+export function faseDoChamado(
+  fluxo: FluxoAssistencia,
+  etapa: number | null,
+  nome: string,
+): FaseChamado {
   if (fluxo === 'ASSISTENCIA_TECNICA' && etapa !== null) {
     if (etapa === 1) return 'nova';
     if (etapa === 5) return 'improcedente';
@@ -89,15 +98,27 @@ export function faseDoChamado(fluxo: FluxoAssistencia, etapa: number | null, nom
 // Filtro e paginação
 // ---------------------------------------------------------------------------
 
+export type PeriodoChamado = 'hoje' | '7' | '30';
+export type LocalChamado = 'unidade' | 'area';
+export type DescricaoChamado = 'com' | 'sem';
+export type OrdemChamado = 'protocolo' | 'data' | 'local' | 'descricao' | 'situacao';
+
 export interface FiltroChamados {
   fluxo?: FluxoAssistencia;
   /** 'abertos' = nova + andamento. */
   fase?: FaseChamado | 'abertos';
-  situacaoId?: string;
-  empreendimentoId?: string;
+  situacaoIds?: string[];
+  empreendimentoIds?: string[];
   /** Id da unidade no CV — para a ficha da unidade. */
   unidadeId?: string;
   busca?: string;
+  /** Aberto hoje / nos últimos 7 ou 30 dias (fuso de São Paulo). */
+  periodo?: PeriodoChamado;
+  local?: LocalChamado;
+  descricao?: DescricaoChamado;
+  /** Padrão: data desc. */
+  ordem?: OrdemChamado;
+  direcao?: 'asc' | 'desc';
   pagina?: number;
   porPagina?: number;
 }
@@ -110,15 +131,28 @@ export interface ResumoSituacao {
   qtd: number;
 }
 
+/**
+ * Contagem facetada de cada filtro: quantos chamados sobrariam em cada opção
+ * aplicando todos os OUTROS filtros (o próprio é ignorado).
+ */
+export interface FacetasChamados {
+  empreendimento: Record<string, number>;
+  periodo: Record<PeriodoChamado | 'todos', number>;
+  local: Record<LocalChamado | 'todos', number>;
+  descricao: Record<DescricaoChamado | 'todos', number>;
+}
+
 export interface PaginaChamados {
   itens: ChamadoAssistencia[];
   total: number;
   pagina: number;
   porPagina: number;
   totalPaginas: number;
-  /** Contagens no fluxo + empreendimento + busca (ignora fase/situação), para os atalhos. */
+  /** Faceta de situação: aplica os outros filtros, ignora fase/situação. Base dos KPIs. */
   porFase: Record<FaseChamado, number>;
   porSituacao: ResumoSituacao[];
+  /** Ausente em respostas de versões anteriores da função (cache antigo). */
+  facetas?: FacetasChamados | undefined;
   empreendimentos: { id: string; nome: string }[];
   /** Quando os dados foram lidos do CV (ISO). */
   atualizadoEm: string;
@@ -142,15 +176,84 @@ function casaBusca(c: ChamadoAssistencia, q: string): boolean {
   ].some((campo) => normalizar(campo).includes(q));
 }
 
-/** Aplica o filtro, ordena (mais recentes primeiro) e recorta a página. */
+/** Área comum = área preenchida ou bloco "A.C" (convenção do CV). */
+export function ehAreaComum(c: ChamadoAssistencia): boolean {
+  return Boolean(c.areaComum?.trim()) || normalizar(c.bloco).replace(/\s/g, '') === 'a.c';
+}
+
+/** Data de hoje (YYYY-MM-DD) em São Paulo — o servidor roda em UTC. */
+export function hojeSaoPaulo(agora = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
+}
+
+function diasAtras(hoje: string, dias: number): string {
+  const d = new Date(`${hoje}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
+const numProtocolo = (c: ChamadoAssistencia): number =>
+  Number((c.protocolo ?? c.id).replace(/\D/g, '')) || 0;
+const chaveLocal = (c: ChamadoAssistencia): string =>
+  [c.empreendimento?.nome, c.bloco, c.unidade?.nome ?? c.areaComum].filter(Boolean).join(' ');
+const comparaTexto = (a: string, b: string): number =>
+  a.localeCompare(b, 'pt-BR', { numeric: true });
+
+function comparador(
+  ordem: OrdemChamado,
+  direcao: 'asc' | 'desc',
+): (a: ChamadoAssistencia, b: ChamadoAssistencia) => number {
+  const sinal = direcao === 'asc' ? 1 : -1;
+  const desempate = (a: ChamadoAssistencia, b: ChamadoAssistencia): number =>
+    Number(b.id) - Number(a.id);
+  return (a, b) => {
+    let r = 0;
+    if (ordem === 'protocolo') r = numProtocolo(a) - numProtocolo(b);
+    else if (ordem === 'data') r = (a.abertoEm ?? '').localeCompare(b.abertoEm ?? '');
+    else if (ordem === 'local') r = comparaTexto(chaveLocal(a), chaveLocal(b));
+    else if (ordem === 'situacao') r = (a.etapa ?? 999) - (b.etapa ?? 999);
+    else {
+      // Solicitação: vazias sempre por último.
+      const va = a.descricao.trim();
+      const vb = b.descricao.trim();
+      if (!va !== !vb) return va ? -1 : 1;
+      r = comparaTexto(va, vb);
+    }
+    return r * sinal || desempate(a, b);
+  };
+}
+
+type Dimensao = 'situacao' | 'empreendimento' | 'periodo' | 'local' | 'descricao';
+const DIMENSOES: readonly Dimensao[] = [
+  'situacao',
+  'empreendimento',
+  'periodo',
+  'local',
+  'descricao',
+];
+
+/** Aplica o filtro, ordena, recorta a página e conta as facetas. */
 export function filtrarChamados(
   todos: readonly ChamadoAssistencia[],
   filtro: FiltroChamados,
   atualizadoEm: string,
+  hoje: string = hojeSaoPaulo(),
 ): PaginaChamados {
   const fluxo = filtro.fluxo ?? 'ASSISTENCIA_TECNICA';
   const q = normalizar(filtro.busca?.trim());
-  const porPagina = Math.min(Math.max(Math.trunc(filtro.porPagina ?? POR_PAGINA_PADRAO), 1), POR_PAGINA_MAX);
+  const porPagina = Math.min(
+    Math.max(Math.trunc(filtro.porPagina ?? POR_PAGINA_PADRAO), 1),
+    POR_PAGINA_MAX,
+  );
+  const situacoesSel = filtro.situacaoIds?.length ? new Set(filtro.situacaoIds) : null;
+  const empreendimentosSel = filtro.empreendimentoIds?.length
+    ? new Set(filtro.empreendimentoIds)
+    : null;
+  const inicio = { hoje, '7': diasAtras(hoje, 6), '30': diasAtras(hoje, 29) } as const;
+  const noPeriodo = (c: ChamadoAssistencia, p: PeriodoChamado): boolean => {
+    const dia = (c.abertoEm ?? '').slice(0, 10);
+    return dia >= (p === 'hoje' ? inicio.hoje : inicio[p]) && dia <= hoje;
+  };
 
   const doFluxo = todos.filter((c) => c.fluxo === fluxo);
 
@@ -159,33 +262,78 @@ export function filtrarChamados(
     if (c.empreendimento?.id) empreendimentosMap.set(c.empreendimento.id, c.empreendimento.nome);
   }
 
-  // Base dos atalhos: fluxo + empreendimento + busca.
-  const base = doFluxo.filter(
-    (c) =>
-      (!filtro.empreendimentoId || c.empreendimento?.id === filtro.empreendimentoId) &&
-      (!filtro.unidadeId || c.unidade?.id === filtro.unidadeId) &&
-      (!q || casaBusca(c, q)),
-  );
-
-  const porFase: Record<FaseChamado, number> = { nova: 0, andamento: 0, improcedente: 0, finalizado: 0 };
+  const porFase: Record<FaseChamado, number> = {
+    nova: 0,
+    andamento: 0,
+    improcedente: 0,
+    finalizado: 0,
+  };
   const situacoes = new Map<string, ResumoSituacao>();
-  for (const c of base) {
-    porFase[c.fase] += 1;
-    const chave = c.situacaoId ?? c.situacao;
-    const s = situacoes.get(chave);
-    if (s) s.qtd += 1;
-    else situacoes.set(chave, { id: c.situacaoId, nome: c.situacao, etapa: c.etapa, fase: c.fase, qtd: 1 });
+  const facetas: FacetasChamados = {
+    empreendimento: {},
+    periodo: { todos: 0, hoje: 0, '7': 0, '30': 0 },
+    local: { todos: 0, unidade: 0, area: 0 },
+    descricao: { todos: 0, com: 0, sem: 0 },
+  };
+  const filtrados: ChamadoAssistencia[] = [];
+
+  for (const c of doFluxo) {
+    if (filtro.unidadeId && c.unidade?.id !== filtro.unidadeId) continue;
+    if (q && !casaBusca(c, q)) continue;
+
+    const area = ehAreaComum(c);
+    const temDescricao = c.descricao.trim() !== '';
+    const passa: Record<Dimensao, boolean> = {
+      situacao:
+        (filtro.fase === 'abertos'
+          ? c.fase === 'nova' || c.fase === 'andamento'
+          : !filtro.fase || c.fase === filtro.fase) &&
+        (!situacoesSel || situacoesSel.has(c.situacaoId ?? '')),
+      empreendimento: !empreendimentosSel || empreendimentosSel.has(c.empreendimento?.id ?? ''),
+      periodo: !filtro.periodo || noPeriodo(c, filtro.periodo),
+      local: !filtro.local || (filtro.local === 'area') === area,
+      descricao: !filtro.descricao || (filtro.descricao === 'com') === temDescricao,
+    };
+    const falhas = DIMENSOES.filter((d) => !passa[d]);
+    if (falhas.length === 0) filtrados.push(c);
+    if (falhas.length > 1) continue;
+    // Conta na faceta D quando o único filtro que falhou (se algum) é o próprio D.
+    const contaEm = (d: Dimensao): boolean => falhas.length === 0 || falhas[0] === d;
+
+    if (contaEm('situacao')) {
+      porFase[c.fase] += 1;
+      const chave = c.situacaoId ?? c.situacao;
+      const s = situacoes.get(chave);
+      if (s) s.qtd += 1;
+      else
+        situacoes.set(chave, {
+          id: c.situacaoId,
+          nome: c.situacao,
+          etapa: c.etapa,
+          fase: c.fase,
+          qtd: 1,
+        });
+    }
+    if (contaEm('empreendimento') && c.empreendimento?.id) {
+      const id = c.empreendimento.id;
+      facetas.empreendimento[id] = (facetas.empreendimento[id] ?? 0) + 1;
+    }
+    if (contaEm('periodo')) {
+      facetas.periodo.todos += 1;
+      for (const p of ['hoje', '7', '30'] as const) if (noPeriodo(c, p)) facetas.periodo[p] += 1;
+    }
+    if (contaEm('local')) {
+      facetas.local.todos += 1;
+      facetas.local[area ? 'area' : 'unidade'] += 1;
+    }
+    if (contaEm('descricao')) {
+      facetas.descricao.todos += 1;
+      facetas.descricao[temDescricao ? 'com' : 'sem'] += 1;
+    }
   }
 
-  const filtrados = base
-    .filter((c) => {
-      if (filtro.fase === 'abertos') {
-        if (c.fase !== 'nova' && c.fase !== 'andamento') return false;
-      } else if (filtro.fase && c.fase !== filtro.fase) return false;
-      if (filtro.situacaoId && c.situacaoId !== filtro.situacaoId) return false;
-      return true;
-    })
-    .sort((a, b) => (b.abertoEm ?? '').localeCompare(a.abertoEm ?? '') || Number(b.id) - Number(a.id));
+  const ordem = filtro.ordem ?? 'data';
+  filtrados.sort(comparador(ordem, filtro.direcao ?? (ordem === 'data' ? 'desc' : 'asc')));
 
   const total = filtrados.length;
   const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
@@ -201,6 +349,7 @@ export function filtrarChamados(
     porSituacao: [...situacoes.values()].sort(
       (a, b) => (a.etapa ?? 999) - (b.etapa ?? 999) || a.nome.localeCompare(b.nome),
     ),
+    facetas,
     empreendimentos: [...empreendimentosMap]
       .map(([id, nome]) => ({ id, nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
@@ -211,20 +360,38 @@ export function filtrarChamados(
 /** Lê o filtro de uma query string (usado pela Edge Function). */
 export function filtroDeQuery(params: URLSearchParams): FiltroChamados {
   const filtro: FiltroChamados = {};
-  const fluxo = params.get('fluxo');
-  if (fluxo === 'ASSISTENCIA_TECNICA' || fluxo === 'ENTREGA_CHAVES' || fluxo === 'OUTRO') filtro.fluxo = fluxo;
-  const fase = params.get('fase');
-  if (fase === 'abertos' || (FASES_CHAMADO as readonly string[]).includes(fase ?? '')) {
-    filtro.fase = fase as FaseChamado | 'abertos';
-  }
-  const situacaoId = params.get('situacaoId');
-  if (situacaoId) filtro.situacaoId = situacaoId;
-  const empreendimentoId = params.get('empreendimentoId');
-  if (empreendimentoId) filtro.empreendimentoId = empreendimentoId;
+  const um = <T extends string>(nome: string, validos: readonly T[]): T | undefined => {
+    const v = params.get(nome);
+    return (validos as readonly string[]).includes(v ?? '') ? (v as T) : undefined;
+  };
+  // Aceita também o parâmetro singular antigo, de clientes ainda sem refresh.
+  const lista = (nome: string, legado: string): string[] | undefined => {
+    const v = (params.get(nome) ?? params.get(legado) ?? '').split(',').filter(Boolean);
+    return v.length ? v : undefined;
+  };
+
+  const fluxo = um('fluxo', ['ASSISTENCIA_TECNICA', 'ENTREGA_CHAVES', 'OUTRO'] as const);
+  if (fluxo) filtro.fluxo = fluxo;
+  const fase = um('fase', ['abertos', ...FASES_CHAMADO] as const);
+  if (fase) filtro.fase = fase;
+  const situacaoIds = lista('situacaoIds', 'situacaoId');
+  if (situacaoIds) filtro.situacaoIds = situacaoIds;
+  const empreendimentoIds = lista('empreendimentoIds', 'empreendimentoId');
+  if (empreendimentoIds) filtro.empreendimentoIds = empreendimentoIds;
   const unidadeId = params.get('unidadeId');
   if (unidadeId) filtro.unidadeId = unidadeId;
   const busca = params.get('busca');
   if (busca) filtro.busca = busca.slice(0, 200);
+  const periodo = um('periodo', ['hoje', '7', '30'] as const);
+  if (periodo) filtro.periodo = periodo;
+  const local = um('local', ['unidade', 'area'] as const);
+  if (local) filtro.local = local;
+  const descricao = um('descricao', ['com', 'sem'] as const);
+  if (descricao) filtro.descricao = descricao;
+  const ordem = um('ordem', ['protocolo', 'data', 'local', 'descricao', 'situacao'] as const);
+  if (ordem) filtro.ordem = ordem;
+  const direcao = um('direcao', ['asc', 'desc'] as const);
+  if (direcao) filtro.direcao = direcao;
   const pagina = Number(params.get('pagina'));
   if (Number.isFinite(pagina) && pagina > 0) filtro.pagina = pagina;
   const porPagina = Number(params.get('porPagina'));
@@ -236,7 +403,12 @@ export function filtroDeQuery(params: URLSearchParams): FiltroChamados {
 export function queryDoFiltro(filtro: FiltroChamados): string {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(filtro)) {
-    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+    const valor = Array.isArray(v) ? v.join(',') : v;
+    if (valor !== undefined && valor !== null && valor !== '') params.set(k, String(valor));
   }
+  // ponytail: compat com a versão da função que só lê o parâmetro singular;
+  // remover quando o deploy com listas estiver no ar.
+  if (filtro.empreendimentoIds?.length === 1) params.set('empreendimentoId', filtro.empreendimentoIds[0]!);
+  if (filtro.situacaoIds?.length === 1) params.set('situacaoId', filtro.situacaoIds[0]!);
   return params.toString();
 }

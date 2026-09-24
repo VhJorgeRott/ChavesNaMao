@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, KeyRound, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Logo } from '@/components/shared/Logo';
 import { useData } from '@/data/DataProvider';
 import type { PortalDelivery } from '@/adapters/types';
 import { SignatureCanvas, type SignatureCanvasHandle } from '@/components/portal/SignatureCanvas';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fArea, maskCpf } from '@chaves/domain/format';
 import { pedirGeolocalizacao } from '@/lib/browser';
 
@@ -53,9 +55,7 @@ export function Portal(): React.JSX.Element {
       {/* Topbar */}
       <header className="border-b border-border bg-card px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <KeyRound className="h-4 w-4" />
-          </div>
+          <Logo className="h-8 w-8" />
           <div className="leading-tight">
             <p className="text-sm font-bold text-foreground">Chaves na Mão</p>
             <p className="text-[11px] text-muted-foreground">Portal de assinatura · Rottas</p>
@@ -65,8 +65,22 @@ export function Portal(): React.JSX.Element {
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 md:py-10">
         {fase === 'carregando' && (
-          <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            Validando o link...
+          <div className="space-y-5" aria-busy="true" aria-label="Validando o link">
+            <div className="space-y-3 rounded-xl border border-border bg-card p-5">
+              <Skeleton className="h-6 w-64 max-w-full" />
+              <Skeleton className="h-4 w-80 max-w-full" />
+              <div className="grid grid-cols-1 gap-x-6 gap-y-2.5 pt-2 sm:grid-cols-2">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Skeleton key={i} className="h-4 w-4/5" />
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2 rounded-xl border border-border bg-card p-5">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+            <Skeleton className="h-[220px] w-full rounded-xl" />
           </div>
         )}
 
@@ -100,12 +114,17 @@ export function Portal(): React.JSX.Element {
               </p>
               <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Linha rotulo="Cliente" valor={delivery.cliente.nome || undefined} />
-                <Linha rotulo="CPF" valor={delivery.cliente.cpf ? maskCpf(delivery.cliente.cpf) : undefined} />
+                <Linha
+                  rotulo="CPF"
+                  valor={delivery.cliente.cpf ? maskCpf(delivery.cliente.cpf) : undefined}
+                />
                 <Linha rotulo="Unidade" valor={delivery.unidade.identificacao || undefined} />
                 <Linha rotulo="Empreendimento" valor={delivery.empreendimento.nome || undefined} />
                 <Linha
                   rotulo="Área"
-                  valor={delivery.unidade.areaM2 != null ? fArea(delivery.unidade.areaM2) : undefined}
+                  valor={
+                    delivery.unidade.areaM2 != null ? fArea(delivery.unidade.areaM2) : undefined
+                  }
                 />
               </dl>
             </div>
@@ -175,7 +194,13 @@ export function Portal(): React.JSX.Element {
   );
 }
 
-function Linha({ rotulo, valor }: { rotulo: string; valor: string | undefined }): React.JSX.Element {
+function Linha({
+  rotulo,
+  valor,
+}: {
+  rotulo: string;
+  valor: string | undefined;
+}): React.JSX.Element {
   return (
     <div className="flex justify-between gap-3 border-b border-border/50 pb-1.5">
       <dt className="text-muted-foreground">{rotulo}</dt>

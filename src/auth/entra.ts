@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
+import { limparCache } from '@/lib/cache-memoria';
 import type { AppUser, Papel } from '@chaves/domain/types';
 
 /**
@@ -49,8 +50,9 @@ export async function exchangeCode(code: string): Promise<string | null> {
   return error ? error.message : null;
 }
 
-/** Encerra a sessão do Supabase. */
+/** Encerra a sessão do Supabase e descarta o cache de telas do usuário que saiu. */
 export async function logoutAzure(): Promise<void> {
+  limparCache();
   await getSupabase().auth.signOut();
 }
 

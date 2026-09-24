@@ -16,7 +16,10 @@ export const UNIDADE_STATUS = [
 export type UnidadeStatus = (typeof UNIDADE_STATUS)[number];
 
 /** Estados em que uma entrega pode ser iniciada (regra de negócio). */
-export const UNIDADE_STATUS_LIBERADO_PARA_ENTREGA: readonly UnidadeStatus[] = ['LIBERADA', 'QUITADA'];
+export const UNIDADE_STATUS_LIBERADO_PARA_ENTREGA: readonly UnidadeStatus[] = [
+  'LIBERADA',
+  'QUITADA',
+];
 
 /** Status relevantes para a operação de entrega (exibidos nas telas). */
 export const UNIDADE_STATUS_VISIVEIS: readonly UnidadeStatus[] = [
@@ -202,11 +205,24 @@ export interface AppUser {
   criadoEm: string | null;
 }
 
+export const TIPOS_MODELO = [
+  'Entrega de chaves',
+  'Confissão de dívida',
+  'Distrato',
+  'Aditivo contratual',
+] as const;
+export type TipoModelo = (typeof TIPOS_MODELO)[number];
+
+export const MODALIDADES_MODELO = ['Financiamento', 'Venda direta'] as const;
+export type ModalidadeModelo = (typeof MODALIDADES_MODELO)[number];
+
 export interface ModeloTermo {
   id: string;
   nome: string;
   /** Texto do termo com variáveis no formato {{grupo.campo}}. */
   conteudo: string;
+  tipo: TipoModelo | null;
+  modalidade: ModalidadeModelo | null;
   createdAt: string;
   updatedAt: string;
 }

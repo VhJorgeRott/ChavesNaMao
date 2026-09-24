@@ -26,7 +26,6 @@ export function CarregarPersistidos(): null {
   useEffect(() => {
     if (status !== 'authenticated' || jaRodou.current) return;
     jaRodou.current = true;
-    let ativo = true;
 
     void carregarPersistidos().catch((e: unknown) =>
       console.warn('[bootstrap] entregas salvas:', e),
@@ -36,7 +35,6 @@ export function CarregarPersistidos(): null {
       try {
         const lista = await garantirEmpreendimentos();
         for (const emp of lista) {
-          if (!ativo) return;
           // Uma falha isolada (empreendimento sem contrato no Mega, timeout) não
           // pode interromper a varredura dos demais.
           await garantirUnidades(emp).catch((e: unknown) =>
@@ -47,10 +45,9 @@ export function CarregarPersistidos(): null {
         console.warn('[bootstrap] catálogo de empreendimentos:', e);
       }
     })();
-
-    return () => {
-      ativo = false;
-    };
+    // Sem cleanup de propósito: este componente vive a sessão inteira, e no
+    // StrictMode a desmontagem simulada abortaria o prefetch — a segunda execução
+    // do efeito sai cedo pelo `jaRodou`, então nada o retomaria.
   }, [status, carregarPersistidos, garantirEmpreendimentos, garantirUnidades]);
 
   return null;

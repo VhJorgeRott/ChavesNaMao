@@ -1,95 +1,140 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Building2,
+  Calendar,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Headset,
-  Loader2,
+  ListChecks,
+  MapPin,
   RefreshCw,
+  Search,
+  X,
 } from 'lucide-react';
 import {
   adapters,
   type ChamadoAssistencia,
+  type DescricaoChamado,
   type FaseChamado,
   type FiltroChamados,
+  type LocalChamado,
+  type OrdemChamado,
   type PaginaChamados,
+  type PeriodoChamado,
 } from '@/adapters';
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ChamadoSituacaoBadge,
   SlaVencidoBadge,
 } from '@/components/assistencia/ChamadoSituacaoBadge';
 import { ChamadoDetalheDialog } from '@/components/assistencia/ChamadoDetalheDialog';
+import { FiltroDropdown } from '@/components/shared/FiltroDropdown';
+import { CabecalhoOrdenavel, RESUMO_SELECIONADO } from '@/components/shared/lista';
+import { n0, pct1 } from '@/lib/numeros';
 import { FASE_META } from '@/components/assistencia/fase';
 import { fData, fDataHora } from '@chaves/domain/format';
 import { cn } from '@/lib/utils';
+import { comCache, lerCache, limparCache } from '@/lib/cache-memoria';
 
-const TODOS = '__todos__';
 const POR_PAGINA = 25;
 const FASES: FaseChamado[] = ['nova', 'andamento', 'improcedente', 'finalizado'];
+const DUAS_HORAS = 2 * 60 * 60 * 1000;
+const TODOS = 'todos';
 
-type FiltroFase = FaseChamado | 'abertos' | typeof TODOS;
+type Kpi = 'todas' | 'aberto' | FaseChamado;
 
-const fNum = (n: number): string => n.toLocaleString('pt-BR');
+/** "NOVA ASSISTÊNCIA" → "Nova assistência". */
+const capitalizar = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
-/** Atalho de fase: contagem + seleção (como o topo da tela do CV). */
-function FaseCard({
-  label,
-  qtd,
-  ativo,
-  onClick,
-  classeMarca,
-}: {
-  label: string;
-  qtd: number | null;
-  ativo: boolean;
-  onClick: () => void;
-  classeMarca: string;
-}): React.JSX.Element {
+const GRID_TABELA = 'grid grid-cols-[116px_96px_minmax(0,1fr)_minmax(0,1.5fr)_200px] gap-4 px-4';
+
+function StatusLeitura({ atualizadoEm }: { atualizadoEm: string }): React.JSX.Element {
+  // Recalcula a cada minuto para virar "Desatualizado" sem recarregar.
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const online = agora - new Date(atualizadoEm).getTime() < DUAS_HORAS;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={ativo}
-      className={cn(
-        'flex flex-col items-start rounded-xl border bg-card p-4 text-left transition-colors',
-        ativo ? 'border-primary ring-1 ring-primary' : 'border-border hover:bg-muted/40',
-      )}
-    >
-      <span className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className={cn('h-2 w-2 rounded-full', classeMarca)} />
-        {label}
-      </span>
-      <span className="mt-1 text-2xl font-bold leading-none text-foreground">
-        {qtd === null ? '-' : fNum(qtd)}
-      </span>
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            'ml-2 inline-flex items-center gap-1.5 rounded-full py-px pl-1.5 pr-2 align-middle text-[11px] font-semibold',
+            online
+              ? 'bg-[rgba(34,197,94,.12)] text-[#15803d]'
+              : 'bg-muted text-slate-600 dark:text-muted-foreground',
+          )}
+        >
+          <span
+            className="h-[7px] w-[7px] rounded-full"
+            style={{
+              backgroundColor: online ? '#22c55e' : '#94a3b8',
+              boxShadow: `0 0 0 2px ${online ? 'rgba(34,197,94,.25)' : 'rgba(148,163,184,.25)'}`,
+            }}
+          />
+          {online ? 'Online' : 'Desatualizado'}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {online
+          ? 'Dados atualizados há menos de 2 horas'
+          : 'Última leitura há mais de 2 horas — clique em Atualizar'}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
 export function Chamados(): React.JSX.Element {
-  const [dados, setDados] = useState<PaginaChamados | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(true);
-
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
-  const [fase, setFase] = useState<FiltroFase>('abertos');
-  const [situacaoId, setSituacaoId] = useState<string>(TODOS);
-  const [empreendimentoId, setEmpreendimentoId] = useState<string>(TODOS);
+  const [kpi, setKpi] = useState<Kpi>('aberto');
+  /** Fase sob o mouse na barra: destaca a célula correspondente da legenda. */
+  const [destaque, setDestaque] = useState<FaseChamado | null>(null);
+  const [situacoes, setSituacoes] = useState<string[]>([]);
+  const [empreendimentos, setEmpreendimentos] = useState<string[]>([]);
+  const [periodo, setPeriodo] = useState<PeriodoChamado | typeof TODOS>(TODOS);
+  const [local, setLocal] = useState<LocalChamado | typeof TODOS>(TODOS);
+  const [descricao, setDescricao] = useState<DescricaoChamado | typeof TODOS>(TODOS);
+  const [ordem, setOrdem] = useState<{ campo: OrdemChamado; dir: 'asc' | 'desc' }>({
+    campo: 'data',
+    dir: 'desc',
+  });
   const [pagina, setPagina] = useState(1);
   const [selecionado, setSelecionado] = useState<ChamadoAssistencia | null>(null);
+
+  const filtro = useMemo<FiltroChamados>(() => {
+    const f: FiltroChamados = {
+      pagina,
+      porPagina: POR_PAGINA,
+      ordem: ordem.campo,
+      direcao: ordem.dir,
+    };
+    if (kpi !== 'todas') f.fase = kpi === 'aberto' ? 'abertos' : kpi;
+    if (situacoes.length) f.situacaoIds = situacoes;
+    if (empreendimentos.length) f.empreendimentoIds = empreendimentos;
+    if (periodo !== TODOS) f.periodo = periodo;
+    if (local !== TODOS) f.local = local;
+    if (descricao !== TODOS) f.descricao = descricao;
+    if (buscaAplicada) f.busca = buscaAplicada;
+    return f;
+  }, [pagina, ordem, kpi, situacoes, empreendimentos, periodo, local, descricao, buscaAplicada]);
+  const chave = `chamados:${JSON.stringify(filtro)}`;
+
+  // Parte do cache (2h): voltar à tela não chama o CRM nem mostra esqueleto.
+  const [dados, setDados] = useState<PaginaChamados | null>(
+    () => lerCache<PaginaChamados>(chave) ?? null,
+  );
+  const [erro, setErro] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(dados === null);
 
   // Busca com debounce: evita uma chamada à função a cada tecla.
   useEffect(() => {
@@ -109,16 +154,20 @@ export function Chamados(): React.JSX.Element {
   const carregar = useCallback(
     async (atualizar = false) => {
       const id = ++requisicao.current;
+      if (atualizar) limparCache('chamados:');
+      const cacheado = lerCache<PaginaChamados>(chave);
+      if (cacheado) {
+        setDados(cacheado);
+        setErro(null);
+        setCarregando(false);
+        return;
+      }
       setCarregando(true);
       setErro(null);
-      const filtro: FiltroChamados & { atualizar?: boolean } = { pagina, porPagina: POR_PAGINA };
-      if (fase !== TODOS) filtro.fase = fase;
-      if (situacaoId !== TODOS) filtro.situacaoId = situacaoId;
-      if (empreendimentoId !== TODOS) filtro.empreendimentoId = empreendimentoId;
-      if (buscaAplicada) filtro.busca = buscaAplicada;
-      if (atualizar) filtro.atualizar = true;
       try {
-        const r = await adapters.assistencia.listarChamados(filtro);
+        const r = await comCache(chave, () =>
+          adapters.assistencia.listarChamados(atualizar ? { ...filtro, atualizar } : filtro),
+        );
         if (id === requisicao.current) setDados(r);
       } catch (e) {
         if (id === requisicao.current) {
@@ -128,24 +177,121 @@ export function Chamados(): React.JSX.Element {
         if (id === requisicao.current) setCarregando(false);
       }
     },
-    [pagina, fase, situacaoId, empreendimentoId, buscaAplicada],
+    [chave, filtro],
   );
 
   useEffect(() => {
     void carregar();
   }, [carregar]);
 
-  const mudarFase = (nova: FiltroFase): void => {
-    setFase(nova);
-    setSituacaoId(TODOS);
+  /** Envolve um setter de filtro: toda mudança volta para a página 1. */
+  const comPagina1 =
+    <T,>(set: (v: T) => void) =>
+    (v: T): void => {
+      set(v);
+      setPagina(1);
+    };
+
+  // Clicar no item ativo volta para "Todas".
+  const mudarKpi = (novo: Kpi): void => {
+    setKpi((atual) => (atual === novo ? 'todas' : novo));
+    setSituacoes([]);
+    setPagina(1);
+  };
+
+  const mudarSituacoes = (v: string[]): void => {
+    setSituacoes(v);
+    if (v.length) setKpi('todas');
+    setPagina(1);
+  };
+
+  const ordenar = (campo: OrdemChamado): void => {
+    setOrdem((atual) =>
+      atual.campo === campo
+        ? { campo, dir: atual.dir === 'asc' ? 'desc' : 'asc' }
+        : { campo, dir: campo === 'data' ? 'desc' : 'asc' },
+    );
+    setPagina(1);
+  };
+
+  const filtrosAtivos =
+    busca.trim() !== '' ||
+    situacoes.length > 0 ||
+    empreendimentos.length > 0 ||
+    periodo !== TODOS ||
+    local !== TODOS ||
+    descricao !== TODOS;
+
+  const limparFiltros = (): void => {
+    setBusca('');
+    setBuscaAplicada('');
+    setSituacoes([]);
+    setEmpreendimentos([]);
+    setPeriodo(TODOS);
+    setLocal(TODOS);
+    setDescricao(TODOS);
     setPagina(1);
   };
 
   const porFase = dados?.porFase ?? null;
-  const totalAbertos = porFase ? porFase.nova + porFase.andamento : null;
+  const facetas = dados?.facetas;
+  const abertos = porFase ? porFase.nova + porFase.andamento : null;
   const totalGeral = porFase ? FASES.reduce((s, f) => s + porFase[f], 0) : null;
   const primeiro = dados && dados.total > 0 ? (dados.pagina - 1) * dados.porPagina + 1 : 0;
   const ultimo = dados ? Math.min(dados.pagina * dados.porPagina, dados.total) : 0;
+
+  /** O item faz parte do filtro ativo? "Em aberto" inclui Novas e Em andamento. */
+  const noFiltro = (k: Exclude<Kpi, 'todas'>): boolean =>
+    kpi === 'todas' || kpi === k || (kpi === 'aberto' && (k === 'nova' || k === 'andamento'));
+
+  const celula = (
+    k: Exclude<Kpi, 'todas'>,
+    label: string,
+    dot: string,
+    qtd: number | null,
+    base: number | null,
+    legenda: string,
+    corPct: string,
+  ): React.JSX.Element => (
+    <button
+      key={k}
+      type="button"
+      onClick={() => mudarKpi(k)}
+      aria-pressed={kpi === k}
+      className={cn(
+        'flex min-w-0 flex-col gap-1 rounded-[10px] px-2.5 py-2 text-left transition-[opacity,background-color] duration-150 hover:bg-slate-50',
+        kpi === k && RESUMO_SELECIONADO,
+        !noFiltro(k) && 'opacity-[0.45]',
+        destaque === k && 'bg-slate-50 opacity-100 ring-1 ring-border',
+      )}
+    >
+      <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-600">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} />
+        {label}
+      </span>
+      <span className="flex items-baseline gap-1.5 tabular-nums">
+        {qtd === null ? (
+          <Skeleton className="h-7 w-8" />
+        ) : (
+          <span className="text-xl font-bold text-foreground">{n0(qtd)}</span>
+        )}
+        <span className="text-xs font-semibold" style={{ color: corPct }}>
+          {qtd === null || base === null ? '-' : pct1(qtd, base || 1)}
+        </span>
+      </span>
+      <span className="truncate text-[11px] text-muted-foreground">{legenda}</span>
+    </button>
+  );
+  const celulaFase = (f: FaseChamado, base: number | null, legenda: string, corPct: string) =>
+    celula(
+      f,
+      FASE_META[f].label,
+      FASE_META[f].dot,
+      porFase ? porFase[f] : null,
+      base,
+      legenda,
+      corPct,
+    );
 
   return (
     <>
@@ -153,210 +299,379 @@ export function Chamados(): React.JSX.Element {
         icon={Headset}
         titulo="Chamados"
         subtitulo={
-          dados
-            ? `Assistência técnica · CV CRM · lido em ${fDataHora(dados.atualizadoEm)}`
-            : 'Assistência técnica · CV CRM'
+          dados ? (
+            <>
+              Assistência técnica · CV CRM · lido em {fDataHora(dados.atualizadoEm)}
+              <StatusLeitura atualizadoEm={dados.atualizadoEm} />
+            </>
+          ) : (
+            'Assistência técnica · CV CRM'
+          )
         }
         actions={
-          <Button variant="outline" onClick={() => void carregar(true)} disabled={carregando}>
+          <Button
+            variant="outline"
+            className="rounded-[10px] hover:border-primary hover:bg-primary hover:text-white"
+            onClick={() => void carregar(true)}
+            disabled={carregando}
+          >
             <RefreshCw className={carregando ? 'animate-spin' : undefined} />
             Atualizar
           </Button>
         }
       />
       <PageContent>
-        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <FaseCard
-            label="Todas"
-            qtd={totalGeral}
-            ativo={fase === TODOS}
-            onClick={() => mudarFase(TODOS)}
-            classeMarca="bg-foreground/40"
-          />
-          <FaseCard
-            label="Em aberto"
-            qtd={totalAbertos}
-            ativo={fase === 'abertos'}
-            onClick={() => mudarFase('abertos')}
-            classeMarca="bg-destructive"
-          />
-          {FASES.map((f) => (
-            <FaseCard
-              key={f}
-              label={FASE_META[f].label}
-              qtd={porFase ? porFase[f] : null}
-              ativo={fase === f}
-              onClick={() => mudarFase(f)}
-              classeMarca={FASE_META[f].classe.split(' ').find((c) => c.startsWith('bg-')) ?? ''}
-            />
-          ))}
-        </div>
-
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-          <div className="lg:min-w-[260px] lg:max-w-sm lg:flex-1">
-            <SearchInput
-              value={busca}
-              onChange={setBusca}
-              placeholder="Buscar por protocolo, cliente, unidade..."
-            />
-          </div>
-          <Select
-            value={situacaoId}
-            onValueChange={(v) => {
-              setSituacaoId(v);
-              setPagina(1);
-            }}
-          >
-            <SelectTrigger className="lg:w-72">
-              <SelectValue placeholder="Situação" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todas as situações</SelectItem>
-              {dados?.porSituacao
-                .filter((s): s is typeof s & { id: string } => s.id !== null)
-                .map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.etapa !== null && `${String(s.etapa).padStart(2, '0')} · `}
-                    {s.nome} ({fNum(s.qtd)})
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={empreendimentoId}
-            onValueChange={(v) => {
-              setEmpreendimentoId(v);
-              setPagina(1);
-            }}
-          >
-            <SelectTrigger className="lg:w-64">
-              <SelectValue placeholder="Empreendimento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos os empreendimentos</SelectItem>
-              {dados?.empreendimentos.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {e.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          {erro ? (
-            <EmptyState
-              icon={AlertTriangle}
-              titulo="Não foi possível carregar os chamados"
-              descricao={erro}
+        <div className="flex flex-col gap-6">
+          <section className="flex flex-col gap-3.5 rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+            <button
+              type="button"
+              onClick={() => mudarKpi('todas')}
+              aria-pressed={kpi === 'todas'}
+              className={cn(
+                'flex items-baseline gap-2.5 self-start rounded-[10px] px-2.5 py-2 text-left transition-[background-color] duration-150 hover:bg-slate-50',
+                kpi === 'todas' && RESUMO_SELECIONADO,
+              )}
             >
-              <Button variant="outline" onClick={() => void carregar()}>
-                <RefreshCw />
-                Tentar novamente
-              </Button>
-            </EmptyState>
-          ) : !dados ? (
-            <div className="space-y-3 p-4">
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                Lendo os chamados do CV CRM. A primeira carga pode levar alguns segundos.
-              </p>
-              {Array.from({ length: 6 }, (_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
+              {totalGeral === null ? (
+                <Skeleton className="h-[30px] w-12" />
+              ) : (
+                <span className="text-[30px] font-bold leading-none tabular-nums text-foreground">
+                  {n0(totalGeral)}
+                </span>
+              )}
+              <span className="text-[13px] font-medium text-muted-foreground">
+                chamados · todas as situações
+              </span>
+            </button>
+
+            <div className="flex h-2 w-full gap-0.5 rounded-full bg-muted">
+              {porFase &&
+                totalGeral &&
+                FASES.filter((f) => porFase[f] > 0).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-label={FASE_META[f].label}
+                    title={FASE_META[f].label}
+                    onClick={() => mudarKpi(f)}
+                    onMouseEnter={() => setDestaque(f)}
+                    onMouseLeave={() => setDestaque(null)}
+                    className={cn(
+                      '-my-1 box-content bg-clip-content py-1 transition-opacity duration-150 first:rounded-l-full last:rounded-r-full',
+                      !noFiltro(f) && 'opacity-25',
+                    )}
+                    style={{
+                      width: `${(porFase[f] / totalGeral) * 100}%`,
+                      backgroundColor: FASE_META[f].dot,
+                    }}
+                  />
+                ))}
             </div>
-          ) : (
-            <div className={cn('transition-opacity', carregando && 'opacity-60')}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-sm">
-                  <thead className="bg-muted text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium">Protocolo</th>
-                      <th className="px-4 py-3 text-left font-medium">Abertura</th>
-                      <th className="px-4 py-3 text-left font-medium">Local</th>
-                      <th className="px-4 py-3 text-left font-medium">Solicitação</th>
-                      <th className="px-4 py-3 text-left font-medium">Situação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dados.itens.map((c) => (
-                      <tr
+
+            {/* Novas + Em andamento = Em aberto: a borda do grupo mostra a hierarquia. */}
+            <div className="grid grid-cols-2 gap-2 min-[760px]:grid-cols-[3fr_1fr_1fr]">
+              <div className="col-span-2 grid grid-cols-3 gap-1 rounded-[10px] border border-border p-1 min-[760px]:col-span-1">
+                {celula(
+                  'aberto',
+                  'Em aberto',
+                  '#ef4444',
+                  abertos,
+                  totalGeral,
+                  'do total de chamados',
+                  '#ef4444',
+                )}
+                {celulaFase('nova', abertos, 'do total em aberto', '#64748b')}
+                {celulaFase('andamento', abertos, 'do total em aberto', '#64748b')}
+              </div>
+              {celulaFase('improcedente', totalGeral, 'do total de chamados', '#64748b')}
+              {celulaFase('finalizado', totalGeral, 'do total de chamados', '#15803d')}
+            </div>
+          </section>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="max-w-[520px] flex-[1_1_280px]">
+                <SearchInput
+                  value={busca}
+                  onChange={setBusca}
+                  placeholder="Buscar por protocolo, cliente, unidade..."
+                />
+              </div>
+              {dados && (
+                <span className="ml-auto text-[13px] text-muted-foreground">
+                  {n0(dados.total)} de {n0(totalGeral ?? 0)} chamados
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <FiltroDropdown
+                multi
+                icon={ListChecks}
+                label="Situação"
+                resumoVazio="Todas"
+                valor={situacoes}
+                onChange={mudarSituacoes}
+                opcoes={(dados?.porSituacao ?? [])
+                  .filter((s): s is typeof s & { id: string } => s.id !== null)
+                  .map((s) => ({
+                    valor: s.id,
+                    label: `${s.etapa !== null ? `${String(s.etapa).padStart(2, '0')} ` : ''}${capitalizar(s.nome)}`,
+                    qtd: s.qtd,
+                  }))}
+              />
+              <FiltroDropdown
+                multi
+                icon={Building2}
+                label="Empreendimento"
+                resumoVazio="Todos"
+                valor={empreendimentos}
+                onChange={comPagina1(setEmpreendimentos)}
+                opcoes={(dados?.empreendimentos ?? []).map((e) => ({
+                  valor: e.id,
+                  label: e.nome,
+                  qtd: facetas ? (facetas.empreendimento[e.id] ?? 0) : undefined,
+                }))}
+              />
+              <FiltroDropdown
+                icon={Calendar}
+                label="Abertura"
+                padrao={TODOS}
+                valor={periodo}
+                onChange={comPagina1((v: string) => setPeriodo(v as PeriodoChamado | typeof TODOS))}
+                opcoes={[
+                  { valor: TODOS, label: 'Qualquer data', qtd: facetas?.periodo.todos },
+                  { valor: 'hoje', label: 'Hoje', qtd: facetas?.periodo.hoje },
+                  { valor: '7', label: 'Últimos 7 dias', qtd: facetas?.periodo['7'] },
+                  { valor: '30', label: 'Últimos 30 dias', qtd: facetas?.periodo['30'] },
+                ]}
+              />
+              <FiltroDropdown
+                icon={MapPin}
+                label="Local"
+                padrao={TODOS}
+                valor={local}
+                onChange={comPagina1((v: string) => setLocal(v as LocalChamado | typeof TODOS))}
+                opcoes={[
+                  { valor: TODOS, label: 'Todos', qtd: facetas?.local.todos },
+                  { valor: 'unidade', label: 'Unidade', qtd: facetas?.local.unidade },
+                  { valor: 'area', label: 'Área comum', qtd: facetas?.local.area },
+                ]}
+              />
+              <FiltroDropdown
+                icon={FileText}
+                label="Solicitação"
+                padrao={TODOS}
+                valor={descricao}
+                onChange={comPagina1((v: string) =>
+                  setDescricao(v as DescricaoChamado | typeof TODOS),
+                )}
+                opcoes={[
+                  { valor: TODOS, label: 'Todas', qtd: facetas?.descricao.todos },
+                  { valor: 'com', label: 'Com descrição', qtd: facetas?.descricao.com },
+                  { valor: 'sem', label: 'Sem descrição', qtd: facetas?.descricao.sem },
+                ]}
+              />
+              {filtrosAtivos && (
+                <button
+                  type="button"
+                  onClick={limparFiltros}
+                  className="flex h-10 items-center gap-1.5 rounded-[10px] px-3 text-sm text-muted-foreground transition-colors hover:bg-card"
+                >
+                  <X className="h-4 w-4" />
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            {erro ? (
+              <EmptyState
+                icon={AlertTriangle}
+                titulo="Não foi possível carregar os chamados"
+                descricao={erro}
+              >
+                <Button variant="outline" onClick={() => void carregar()}>
+                  <RefreshCw />
+                  Tentar novamente
+                </Button>
+              </EmptyState>
+            ) : !dados ? (
+              <div className="overflow-x-auto" aria-busy="true">
+                <div className="min-w-[780px]">
+                  <div className={cn(GRID_TABELA, 'h-11 items-center bg-muted')}>
+                    {[20, 16, 24, 32, 20].map((w, i) => (
+                      <Skeleton key={i} className="h-3.5" style={{ width: `${w * 4}px` }} />
+                    ))}
+                  </div>
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        GRID_TABELA,
+                        'items-start border-t border-border py-3.5',
+                        i % 2 === 1 ? 'bg-muted/50' : 'bg-card',
+                      )}
+                    >
+                      <Skeleton className="h-4 w-16" />
+                      <span className="flex flex-col gap-1.5">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-3 w-10" />
+                      </span>
+                      <span className="flex flex-col gap-1.5">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </span>
+                      <span className="flex flex-col gap-1.5">
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-3 w-2/5" />
+                      </span>
+                      <Skeleton className="h-6 w-28 rounded-full" />
+                    </div>
+                  ))}
+                  <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                    Lendo os chamados do CV CRM. A primeira carga pode levar alguns segundos.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className={cn('transition-opacity', carregando && 'opacity-60')}>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[780px]">
+                    <div
+                      className={cn(
+                        GRID_TABELA,
+                        'h-11 items-center bg-muted text-sm text-slate-600 dark:text-muted-foreground',
+                      )}
+                    >
+                      <CabecalhoOrdenavel
+                        label="Protocolo"
+                        campo="protocolo"
+                        ordem={ordem}
+                        onOrdenar={ordenar}
+                      />
+                      <CabecalhoOrdenavel
+                        label="Abertura"
+                        campo="data"
+                        ordem={ordem}
+                        onOrdenar={ordenar}
+                      />
+                      <CabecalhoOrdenavel
+                        label="Local"
+                        campo="local"
+                        ordem={ordem}
+                        onOrdenar={ordenar}
+                      />
+                      <CabecalhoOrdenavel
+                        label="Solicitação"
+                        campo="descricao"
+                        ordem={ordem}
+                        onOrdenar={ordenar}
+                      />
+                      <CabecalhoOrdenavel
+                        label="Situação"
+                        campo="situacao"
+                        ordem={ordem}
+                        onOrdenar={ordenar}
+                      />
+                    </div>
+                    {dados.itens.map((c, i) => (
+                      <div
                         key={c.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelecionado(c)}
-                        className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/30"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelecionado(c);
+                          }
+                        }}
+                        className={cn(
+                          GRID_TABELA,
+                          'cursor-pointer items-start border-t border-border py-3.5 text-sm transition-colors hover:bg-[#fff7e8] dark:hover:bg-primary/10',
+                          i % 2 === 1 ? 'bg-muted/50' : 'bg-card',
+                        )}
                       >
-                        <td className="whitespace-nowrap px-4 py-3 font-medium text-foreground">
-                          {c.protocolo ?? `#${c.id}`}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                          {fData(c.abertoEm)}
-                        </td>
-                        <td className="max-w-[240px] px-4 py-3 text-muted-foreground">
-                          <span className="block truncate text-foreground">
+                        <span className="font-medium tabular-nums text-foreground [overflow-wrap:anywhere]">
+                          {(c.protocolo ?? c.id).replace(/^#/, '')}
+                        </span>
+                        <span>
+                          <span className="block text-foreground">{fData(c.abertoEm)}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {c.abertoEm?.slice(11, 16) ?? ''}
+                          </span>
+                        </span>
+                        <span className="[overflow-wrap:anywhere]">
+                          <span className="block text-foreground">
                             {c.unidade
                               ? [c.bloco, c.unidade.nome].filter(Boolean).join(' · ')
                               : (c.areaComum ?? 'Área comum')}
                           </span>
-                          <span className="block truncate text-xs">{c.empreendimento?.nome}</span>
-                        </td>
-                        <td className="max-w-[320px] px-4 py-3 text-muted-foreground">
-                          <span className="block truncate text-foreground">
+                          <span className="block text-xs text-muted-foreground">
+                            {c.empreendimento?.nome}
+                          </span>
+                        </span>
+                        <span>
+                          <span className="block leading-[1.45] text-foreground [text-wrap:pretty]">
                             {c.descricao || '-'}
                           </span>
-                          <span className="block truncate text-xs">
+                          <span className="block text-xs text-muted-foreground">
                             {c.cliente?.nome ?? c.sindico ?? '-'}
                           </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <ChamadoSituacaoBadge chamado={c} />
-                            {c.slaVencido && <SlaVencidoBadge />}
-                          </div>
-                        </td>
-                      </tr>
+                        </span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <ChamadoSituacaoBadge chamado={c} />
+                          {c.slaVencido && <SlaVencidoBadge />}
+                        </span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {dados.total === 0 ? (
-                <EmptyState
-                  icon={Headset}
-                  titulo="Nenhum chamado encontrado"
-                  descricao="Ajuste a busca ou os filtros para ver outros chamados."
-                />
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground">
-                  <span>
-                    {fNum(primeiro)}–{fNum(ultimo)} de {fNum(dados.total)} chamados
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={carregando || dados.pagina <= 1}
-                      onClick={() => setPagina(dados.pagina - 1)}
-                    >
-                      <ChevronLeft />
-                      Anterior
-                    </Button>
-                    <span className="whitespace-nowrap">
-                      Página {fNum(dados.pagina)} de {fNum(dados.totalPaginas)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={carregando || dados.pagina >= dados.totalPaginas}
-                      onClick={() => setPagina(dados.pagina + 1)}
-                    >
-                      Próxima
-                      <ChevronRight />
-                    </Button>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {dados.total === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-center">
+                    <Search className="h-10 w-10 text-slate-400" />
+                    <p className="text-[15px] font-semibold text-foreground">
+                      Nenhum chamado encontrado
+                    </p>
+                    <p className="text-[13px] text-muted-foreground">
+                      Ajuste a busca ou os filtros.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground">
+                    <span>
+                      {n0(primeiro)}–{n0(ultimo)} de {n0(dados.total)} chamados
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={carregando || dados.pagina <= 1}
+                        onClick={() => setPagina(dados.pagina - 1)}
+                      >
+                        <ChevronLeft />
+                        Anterior
+                      </Button>
+                      <span className="whitespace-nowrap">
+                        Página {n0(dados.pagina)} de {n0(dados.totalPaginas)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={carregando || dados.pagina >= dados.totalPaginas}
+                        onClick={() => setPagina(dados.pagina + 1)}
+                      >
+                        Próxima
+                        <ChevronRight />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </PageContent>
 

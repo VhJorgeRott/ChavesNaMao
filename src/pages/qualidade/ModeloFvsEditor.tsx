@@ -22,6 +22,8 @@ import {
 import { PageContent, PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CabecalhoSkeleton } from '@/components/shared/skeletons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -166,9 +168,33 @@ export function ModeloFvsEditor(): React.JSX.Element {
 
   if (!carregado) {
     return (
-      <div className="flex flex-1 items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
+      <>
+        <CabecalhoSkeleton />
+        <PageContent>
+          <div className="mx-auto max-w-4xl space-y-4" aria-busy="true">
+            <Card>
+              <CardContent className="grid gap-4 p-5 md:grid-cols-2">
+                {['md:col-span-2', '', ''].map((c, i) => (
+                  <div key={i} className={`space-y-1.5 ${c}`}>
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            {[0, 1].map((i) => (
+              <Card key={i}>
+                <CardContent className="space-y-3 p-5">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-3/4" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </PageContent>
+      </>
     );
   }
 

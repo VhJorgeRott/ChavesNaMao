@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   Building2,
-  ChevronsUpDown,
-  Eye,
-  DoorOpen,
-  KeyRound,
+  ChevronRight,
   Loader2,
+  Search,
   Send,
-  Tag,
   TriangleAlert,
-  type LucideIcon,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useData } from '@/data/DataProvider';
@@ -22,22 +17,17 @@ import { useSession } from '@/auth/SessionProvider';
 import { UNIDADE_STATUS, type Empreendimento, type UnidadeStatus } from '@chaves/domain/types';
 import { UNIDADE_STATUS_META } from '@chaves/domain/status';
 import { PageContent } from '@/components/shared/PageHeader';
+import { CabecalhoSkeleton, LinhasSkeleton } from '@/components/shared/skeletons';
 import { SearchInput } from '@/components/shared/SearchInput';
 import { InadimplenciaBadge, UnidadeStatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { UnidadeDetalheDialog } from '@/components/unidades/UnidadeDetalheDialog';
+import { FiltroDropdown } from '@/components/shared/FiltroDropdown';
+import { CabecalhoOrdenavel, RESUMO_SELECIONADO, type Ordem } from '@/components/shared/lista';
+import { n0, pct1 } from '@/lib/numeros';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { fArea } from '@chaves/domain/format';
 import { cn } from '@/lib/utils';
 
@@ -53,7 +43,12 @@ const SEM_ENTREGA: readonly UnidadeStatus[] = ['DISPONIVEL', 'EM_OBRAS'];
 
 /** Colunas ordenáveis da tabela de unidades. */
 type CampoOrdem = 'contrato' | 'cliente' | 'unidade' | 'area' | 'status' | 'inadimplente';
-type Ordenacao = { campo: CampoOrdem | null; dir: 'asc' | 'desc' };
+
+/** Célula ativa do resumo: um status, as inadimplentes ou as com entrega iniciada. */
+type Kpi = 'todas' | UnidadeStatus | 'inadimplente' | 'entrega';
+
+const GRID_TABELA =
+  'grid grid-cols-[20px_110px_minmax(0,1.4fr)_minmax(0,1fr)_80px_120px_130px_20px] items-center gap-4 px-4';
 
 /**
  * Comparador genérico para a ordenação da tabela. Strings usam `localeCompare`
@@ -97,9 +92,11 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const [empreendimento, setEmpreendimento] = useState<Empreendimento | undefined>(doCache);
   const [carregandoEmp, setCarregandoEmp] = useState(doCache === undefined);
   const [busca, setBusca] = useState('');
-  const [statusFiltro, setStatusFiltro] = useState<string>(TODOS);
+  const [kpi, setKpi] = useState<Kpi>('todas');
+  /** Status sob o mouse na barra: destaca a célula correspondente da legenda. */
+  const [destaque, setDestaque] = useState<UnidadeStatus | null>(null);
   const [inadimplenciaFiltro, setInadimplenciaFiltro] = useState<string>(TODOS);
-  const [ordenacao, setOrdenacao] = useState<Ordenacao>({ campo: 'cliente', dir: 'asc' });
+  const [ordenacao, setOrdenacao] = useState<Ordem<CampoOrdem>>({ campo: 'cliente', dir: 'asc' });
   const [iniciando, setIniciando] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<UnidadeResumo | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
@@ -186,9 +183,12 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return unidades.filter(({ unidade }) => {
-      if (statusFiltro !== TODOS && unidade.status !== statusFiltro) return false;
+    return unidades.filter(({ unidade, entregaAtiva }) => {
       const info = infoIntegracao[unidade.id];
+      if (kpi === 'entrega' && !entregaAtiva) return false;
+      if (kpi === 'inadimplente' && info?.inadimplente !== true) return false;
+      if (kpi !== 'todas' && kpi !== 'entrega' && kpi !== 'inadimplente' && unidade.status !== kpi)
+        return false;
       if (inadimplenciaFiltro === INADIMPLENTE && info?.inadimplente !== true) return false;
       if (inadimplenciaFiltro === EM_DIA && info?.inadimplente !== false) return false;
       if (!q) return true;
@@ -198,11 +198,10 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
         (info?.contrato?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [unidades, busca, statusFiltro, inadimplenciaFiltro, infoIntegracao]);
+  }, [unidades, busca, kpi, inadimplenciaFiltro, infoIntegracao]);
 
   // Ordenação aplicada depois do filtro, sem recomputar `filtradas`.
   const ordenadas = useMemo(() => {
-    if (!ordenacao.campo) return filtradas;
     const campo = ordenacao.campo;
     const valor = ({ unidade }: UnidadeResumo): string | number | boolean | null | undefined => {
       const info = infoIntegracao[unidade.id];
@@ -236,14 +235,43 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   const metricas = useMemo(
     () => ({
       total: unidades.length,
-      vendidas: unidades.filter((r) => r.unidade.status === 'VENDIDA').length,
-      disponiveis: unidades.filter((r) => r.unidade.status === 'DISPONIVEL').length,
+      porStatus: Object.fromEntries(
+        UNIDADE_STATUS.map((s) => [s, unidades.filter((r) => r.unidade.status === s).length]),
+      ) as Record<UnidadeStatus, number>,
       inadimplentes: unidades.filter((r) => infoIntegracao[r.unidade.id]?.inadimplente === true)
         .length,
       entregasIniciadas: unidades.filter((r) => r.entregaAtiva).length,
     }),
     [unidades, infoIntegracao],
   );
+
+  // Contagem por opção do filtro de inadimplência, respeitando o resumo ativo.
+  const facetaInadimplencia = useMemo(() => {
+    const base = unidades.filter(({ unidade, entregaAtiva }) =>
+      kpi === 'todas'
+        ? true
+        : kpi === 'entrega'
+          ? Boolean(entregaAtiva)
+          : kpi === 'inadimplente'
+            ? infoIntegracao[unidade.id]?.inadimplente === true
+            : unidade.status === kpi,
+    );
+    const inad = base.filter((r) => infoIntegracao[r.unidade.id]?.inadimplente === true).length;
+    const emDia = base.filter((r) => infoIntegracao[r.unidade.id]?.inadimplente === false).length;
+    return { todos: base.length, inad, emDia };
+  }, [unidades, kpi, infoIntegracao]);
+
+  // Clicar no item ativo volta para "Todas"; a seleção sai de vista junto.
+  const mudarKpi = (novo: Kpi): void => {
+    setKpi((atual) => (atual === novo ? 'todas' : novo));
+    setSelecionadas(new Set());
+  };
+
+  const filtrosAtivos = busca.trim() !== '' || inadimplenciaFiltro !== TODOS;
+  const limparFiltros = (): void => {
+    setBusca('');
+    setInadimplenciaFiltro(TODOS);
+  };
 
   async function iniciar(resumo: UnidadeResumo) {
     setIniciando(resumo.unidade.id);
@@ -319,37 +347,46 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
 
   if (carregandoEmp) {
     return (
-      <div className="flex flex-1 items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
+      <>
+        <CabecalhoSkeleton voltar />
+        <PageContent>
+          <div className="flex flex-col gap-6">
+            <Skeleton className="h-[148px] w-full rounded-xl" />
+            <Skeleton className="h-10 w-full max-w-[520px] rounded-[10px]" />
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              <div className="h-11 bg-muted" />
+              <LinhasSkeleton linhas={8} />
+            </div>
+          </div>
+        </PageContent>
+      </>
     );
   }
   if (!empreendimento) return <></>;
 
   return (
     <>
-      <header className="border-b border-border bg-card px-4 py-4 safe-px md:px-8">
+      <header className="border-b border-border bg-card px-4 py-3 safe-px md:px-8">
         <div className="mx-auto max-w-[1400px]">
-          <Link
-            to="/unidades"
-            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Empreendimentos
-          </Link>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Building2 className="h-5 w-5" />
-            </div>
+            <Button variant="ghost" size="icon" className="-mr-1" asChild>
+              <Link to="/unidades" aria-label="Voltar para Empreendimentos">
+                <ArrowLeft />
+              </Link>
+            </Button>
+            <Building2 className="h-5 w-5 shrink-0 text-primary" />
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
+              <h1 className="text-base font-bold tracking-tight text-foreground">
                 {empreendimento.nome}
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {empreendimento.cidade}/{empreendimento.uf} ·{' '}
-                {carregandoInfo && unidades.length === 0
-                  ? 'Carregando...'
-                  : `${unidades.length} unidade(s)`}
+                {carregandoInfo && unidades.length === 0 ? (
+                  // <p> não aceita <div>: skeleton inline.
+                  <span className="inline-block h-3 w-20 animate-pulse rounded-md bg-muted align-middle" />
+                ) : (
+                  `${unidades.length} unidade(s)`
+                )}
               </p>
             </div>
           </div>
@@ -357,222 +394,324 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
       </header>
 
       <PageContent>
-        <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <KpiCard
-            icon={Building2}
-            accent="hsl(var(--primary))"
-            label="Unidades"
-            value={metricas.total}
-            tooltip="Total de unidades cadastradas no empreendimento, vendidas ou não."
-          />
-          <KpiCard
-            icon={Tag}
-            accent="#8b5cf6"
-            label="Vendidas"
-            value={metricas.vendidas}
-            tooltip="Unidades com status Vendida."
-          />
-          <KpiCard
-            icon={DoorOpen}
-            accent="#3b82f6"
-            label="Disponíveis"
-            value={metricas.disponiveis}
-            tooltip="Unidades ainda sem venda no CV."
-          />
-          <KpiCard
-            icon={TriangleAlert}
-            accent="#ef4444"
-            label="Inadimplentes"
-            value={metricas.inadimplentes}
-            carregando={carregandoInfo}
-            tooltip="Unidades cujo contrato está inadimplente no Mega."
-          />
-          <KpiCard
-            icon={KeyRound}
-            accent="#f29f05"
-            label="Entregas iniciadas"
-            value={metricas.entregasIniciadas}
-            tooltip="Unidades com uma entrega já em andamento."
-          />
-        </div>
-
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="md:max-w-sm md:flex-1">
-            <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por unidade, cliente, contrato..." />
-          </div>
-          <Select value={statusFiltro} onValueChange={setStatusFiltro}>
-            <SelectTrigger className="md:w-48">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos os status</SelectItem>
-              {statusPresentes.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {UNIDADE_STATUS_META[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={inadimplenciaFiltro} onValueChange={setInadimplenciaFiltro}>
-            <SelectTrigger className="md:w-48">
-              <SelectValue placeholder="Inadimplência" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todas as situações</SelectItem>
-              <SelectItem value={INADIMPLENTE}>Inadimplente</SelectItem>
-              <SelectItem value={EM_DIA}>Em dia</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {avisoIntegracao && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            {avisoIntegracao}
-          </div>
-        )}
-
-        {selecionadasVisiveis.length > 0 && (
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm font-medium text-foreground">
-              {selecionadasVisiveis.length} unidade(s) selecionada(s)
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelecionadas(new Set())}
-                disabled={enviandoMassa}
+        <div className="flex flex-col gap-6">
+          {/* Resumo — cada célula filtra a tabela. */}
+          <section className="flex flex-col gap-3.5 rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => mudarKpi('todas')}
+                aria-pressed={kpi === 'todas'}
+                title="Todas as unidades cadastradas, vendidas ou não"
+                className={cn(
+                  'flex items-baseline gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-[background-color] duration-150 hover:bg-slate-50',
+                  kpi === 'todas' && RESUMO_SELECIONADO,
+                )}
               >
-                Limpar seleção
-              </Button>
-              <Button size="sm" onClick={enviarTermosEmMassa} disabled={enviandoMassa}>
-                {enviandoMassa ? <Loader2 className="animate-spin" /> : <Send />}
-                {enviandoMassa ? 'Enviando...' : 'Enviar termo em massa'}
-              </Button>
+                <span className="text-[30px] font-bold leading-none tabular-nums text-foreground">
+                  {n0(metricas.total)}
+                </span>
+                <span className="text-[13px] font-medium text-muted-foreground">
+                  unidades · todos os status
+                </span>
+              </button>
+              <span className="text-xs text-muted-foreground">% do total de unidades</span>
             </div>
-          </div>
-        )}
 
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm">
-              <thead className="bg-muted text-muted-foreground">
-                <tr>
-                  <th className="w-10 px-4 py-3">
-                    <Checkbox
-                      aria-label="Selecionar todas as unidades"
-                      checked={todasSelecionadas}
-                      ref={(el) => {
-                        if (el) el.indeterminate = algumaSelecionada;
-                      }}
-                      onChange={alternarTodas}
-                    />
-                  </th>
-                  <ThOrdenavel campo="contrato" label="Contrato" ordenacao={ordenacao} onSort={alternarOrdem} />
-                  <ThOrdenavel campo="cliente" label="Cliente" ordenacao={ordenacao} onSort={alternarOrdem} />
-                  <ThOrdenavel campo="unidade" label="Unidade" ordenacao={ordenacao} onSort={alternarOrdem} />
-                  <ThOrdenavel campo="area" label="Área" ordenacao={ordenacao} onSort={alternarOrdem} className="max-md:hidden" />
-                  <ThOrdenavel campo="status" label="Status" ordenacao={ordenacao} onSort={alternarOrdem} />
-                  <ThOrdenavel campo="inadimplente" label="Inadimplência" ordenacao={ordenacao} onSort={alternarOrdem} />
-                  <th className="px-4 py-3 text-right font-medium">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ordenadas.map((resumo) => {
+            <div className="flex h-2 w-full gap-0.5 rounded-full bg-muted">
+              {statusPresentes.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  aria-label={UNIDADE_STATUS_META[s].label}
+                  title={UNIDADE_STATUS_META[s].label}
+                  onClick={() => mudarKpi(s)}
+                  onMouseEnter={() => setDestaque(s)}
+                  onMouseLeave={() => setDestaque(null)}
+                  className={cn(
+                    '-my-1 box-content bg-clip-content py-1 transition-opacity duration-150 first:rounded-l-full last:rounded-r-full',
+                    kpi !== 'todas' && kpi !== s && 'opacity-25',
+                  )}
+                  style={{
+                    width: `${(metricas.porStatus[s] / metricas.total) * 100}%`,
+                    backgroundColor: UNIDADE_STATUS_META[s].color,
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Status (soma 100%) no grupo com borda; os indicadores transversais ao lado. */}
+            <div className="grid grid-cols-2 gap-2 min-[760px]:grid-cols-[3fr_1fr_1fr]">
+              <div className="col-span-2 grid grid-cols-[repeat(auto-fit,minmax(96px,1fr))] gap-1 rounded-[10px] border border-border p-1 min-[760px]:col-span-1">
+                {statusPresentes.map((s) => (
+                  <CelulaResumo
+                    key={s}
+                    label={UNIDADE_STATUS_META[s].label}
+                    dot={UNIDADE_STATUS_META[s].color}
+                    qtd={metricas.porStatus[s]}
+                    total={metricas.total}
+                    ativa={kpi === s}
+                    apagada={kpi !== 'todas' && kpi !== s}
+                    destacada={destaque === s}
+                    onClick={() => mudarKpi(s)}
+                    title={`Unidades com status ${UNIDADE_STATUS_META[s].label}`}
+                  />
+                ))}
+              </div>
+              <CelulaResumo
+                label="Inadimplentes"
+                dot="#ef4444"
+                corPct="#ef4444"
+                qtd={carregandoInfo ? null : metricas.inadimplentes}
+                total={metricas.total}
+                ativa={kpi === 'inadimplente'}
+                apagada={kpi !== 'todas' && kpi !== 'inadimplente'}
+                onClick={() => mudarKpi('inadimplente')}
+                title="Unidades cujo contrato está inadimplente no Mega"
+              />
+              <CelulaResumo
+                label="Entregas iniciadas"
+                dot="#f29f05"
+                qtd={metricas.entregasIniciadas}
+                total={metricas.total}
+                ativa={kpi === 'entrega'}
+                apagada={kpi !== 'todas' && kpi !== 'entrega'}
+                onClick={() => mudarKpi('entrega')}
+                title="Unidades com uma entrega já em andamento"
+              />
+            </div>
+          </section>
+
+          {/* Busca + filtros, na mesma linha */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="max-w-[520px] flex-[1_1_280px]">
+              <SearchInput
+                value={busca}
+                onChange={setBusca}
+                placeholder="Buscar por unidade, cliente, contrato..."
+              />
+            </div>
+            <FiltroDropdown
+              icon={TriangleAlert}
+              label="Inadimplência"
+              padrao={TODOS}
+              valor={inadimplenciaFiltro}
+              onChange={setInadimplenciaFiltro}
+              opcoes={[
+                { valor: TODOS, label: 'Todas', qtd: facetaInadimplencia.todos },
+                { valor: INADIMPLENTE, label: 'Inadimplente', qtd: facetaInadimplencia.inad },
+                { valor: EM_DIA, label: 'Em dia', qtd: facetaInadimplencia.emDia },
+              ]}
+            />
+            {filtrosAtivos && (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="flex h-10 items-center gap-1.5 rounded-[10px] px-3 text-sm text-muted-foreground transition-colors hover:bg-card"
+              >
+                <X className="h-4 w-4" />
+                Limpar filtros
+              </button>
+            )}
+            <span className="ml-auto text-[13px] text-muted-foreground">
+              {n0(filtradas.length)} de {n0(metricas.total)} unidades
+            </span>
+          </div>
+
+          {avisoIntegracao && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              {avisoIntegracao}
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            {/* Barra de seleção em massa */}
+            {selecionadasVisiveis.length > 0 && (
+              <div className="flex min-h-11 flex-wrap items-center gap-3 border-b border-[#fde7bd] bg-[#fff7e8] px-4 py-1.5 dark:border-primary/30 dark:bg-primary/10">
+                <span className="text-sm font-semibold text-foreground">
+                  {n0(selecionadasVisiveis.length)} unidade(s) selecionada(s)
+                </span>
+                <Button
+                  size="sm"
+                  className="ml-auto h-[30px]"
+                  onClick={enviarTermosEmMassa}
+                  disabled={enviandoMassa}
+                >
+                  {enviandoMassa ? <Loader2 className="animate-spin" /> : <Send />}
+                  {enviandoMassa ? 'Enviando...' : 'Enviar termo em massa'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setSelecionadas(new Set())}
+                  disabled={enviandoMassa}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Limpar seleção
+                </button>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <div className="min-w-[900px]">
+                <div
+                  className={cn(
+                    GRID_TABELA,
+                    'h-11 bg-muted text-sm text-slate-600 dark:text-muted-foreground',
+                  )}
+                >
+                  <Checkbox
+                    aria-label="Selecionar todas as unidades"
+                    checked={todasSelecionadas}
+                    ref={(el) => {
+                      if (el) el.indeterminate = algumaSelecionada;
+                    }}
+                    onChange={alternarTodas}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Contrato"
+                    campo="contrato"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Cliente"
+                    campo="cliente"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Unidade"
+                    campo="unidade"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Área"
+                    campo="area"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Status"
+                    campo="status"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <CabecalhoOrdenavel
+                    label="Inadimplência"
+                    campo="inadimplente"
+                    ordem={ordenacao}
+                    onOrdenar={alternarOrdem}
+                  />
+                  <span />
+                </div>
+
+                {ordenadas.map((resumo, i) => {
                   const { unidade } = resumo;
+                  const info = infoIntegracao[unidade.id];
                   const selecionada = selecionadas.has(unidade.id);
                   const semEntrega = SEM_ENTREGA.includes(unidade.status);
                   return (
-                    <tr
+                    <div
                       key={unidade.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setDetalhe(resumo)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setDetalhe(resumo);
+                        }
+                      }}
                       className={cn(
-                        'border-b border-border/60 last:border-0 hover:bg-muted/30',
-                        selecionada && 'bg-primary/5',
+                        GRID_TABELA,
+                        'cursor-pointer border-t border-border py-3 text-sm transition-colors hover:bg-[#fff7e8] dark:hover:bg-primary/10',
+                        selecionada && !semEntrega
+                          ? 'bg-[#fffbf2] dark:bg-primary/5'
+                          : i % 2 === 1
+                            ? 'bg-muted/50'
+                            : 'bg-card',
                       )}
                     >
-                      <td className="px-4 py-3">
+                      {/* O clique no checkbox não pode abrir a unidade. */}
+                      <span onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           aria-label={`Selecionar ${unidade.identificacao}`}
                           checked={selecionada && !semEntrega}
                           disabled={semEntrega}
                           onChange={() => alternarUma(unidade.id)}
                         />
-                      </td>
-                      <td className="px-4 py-3 font-medium text-foreground">
+                      </span>
+                      <span className="font-medium tabular-nums text-foreground [overflow-wrap:anywhere]">
                         {carregandoInfo ? (
                           <Skeleton className="h-4 w-20" />
                         ) : (
-                          (infoIntegracao[unidade.id]?.contrato ?? (
-                            <span className="text-muted-foreground">—</span>
-                          ))
+                          (info?.contrato ?? <span className="text-slate-400">-</span>)
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-foreground">
+                      </span>
+                      <span className="text-foreground [overflow-wrap:anywhere]">
                         {carregandoInfo ? (
                           <Skeleton className="h-4 w-28" />
                         ) : (
-                          (infoIntegracao[unidade.id]?.cliente ?? (
-                            <span className="text-muted-foreground">—</span>
-                          ))
+                          (info?.cliente ?? <span className="text-slate-400">Sem cliente</span>)
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-foreground">
-                        <button
-                          type="button"
-                          onClick={() => setDetalhe(resumo)}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {unidade.identificacao}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground max-md:hidden">
+                      </span>
+                      <span className="font-semibold text-[#b36f00] [overflow-wrap:anywhere] dark:text-primary">
+                        {unidade.identificacao}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
                         {fArea(unidade.areaM2)}
-                      </td>
-                      <td className="px-4 py-3">
+                      </span>
+                      <span>
                         <UnidadeStatusBadge status={unidade.status} />
-                      </td>
-                      <td className="px-4 py-3">
+                      </span>
+                      <span>
                         {carregandoInfo ? (
                           <Skeleton className="h-4 w-24" />
-                        ) : infoIntegracao[unidade.id]?.inadimplente !== undefined ? (
-                          <InadimplenciaBadge
-                            inadimplente={infoIntegracao[unidade.id]?.inadimplente ?? false}
-                          />
+                        ) : info?.inadimplente !== undefined ? (
+                          <InadimplenciaBadge inadimplente={info.inadimplente} />
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-slate-400">-</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button variant="outline" size="sm" onClick={() => setDetalhe(resumo)}>
-                          <Eye />
-                          Ver unidade
-                        </Button>
-                      </td>
-                    </tr>
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-
-          {filtradas.length === 0 &&
-            (carregandoInfo ? (
-              <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                Buscando unidades...
               </div>
-            ) : (
-              <EmptyState
-                icon={Building2}
-                titulo="Nenhuma unidade encontrada"
-                descricao={
-                  unidades.length > 0
-                    ? 'Ajuste a busca ou o filtro de status.'
-                    : 'O empreendimento não tem unidades no CV nem contratos no Mega.'
-                }
-              />
-            ))}
+            </div>
+
+            {filtradas.length === 0 &&
+              (carregandoInfo ? (
+                <div className="overflow-x-auto" aria-busy="true">
+                  <div className="min-w-[900px]">
+                    {Array.from({ length: 8 }, (_, i) => (
+                      <div key={i} className={cn(GRID_TABELA, 'border-t border-border py-3')}>
+                        <Skeleton className="h-4 w-4" />
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-14" />
+                        <Skeleton className="h-6 w-24 rounded-full" />
+                        <Skeleton className="h-6 w-24 rounded-full" />
+                        <span />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={unidades.length > 0 ? Search : Building2}
+                  titulo="Nenhuma unidade encontrada"
+                  descricao={
+                    unidades.length > 0
+                      ? 'Ajuste a busca ou os filtros.'
+                      : 'O empreendimento não tem unidades no CV nem contratos no Mega.'
+                  }
+                />
+              ))}
+          </div>
         </div>
       </PageContent>
 
@@ -594,80 +733,60 @@ export function EmpreendimentoUnidades(): React.JSX.Element {
   );
 }
 
-/** Card de indicador (KPI) com tooltip explicativo no hover — padrão do design system. */
-function KpiCard({
-  icon: Icon,
+/** Célula do card de resumo (padrão Chamados/Entregas): clicar filtra a tabela. */
+function CelulaResumo({
   label,
-  value,
-  tooltip,
-  accent,
-  carregando = false,
+  dot,
+  qtd,
+  total,
+  ativa,
+  apagada,
+  destacada = false,
+  corPct = '#64748b',
+  onClick,
+  title,
 }: {
-  icon: LucideIcon;
   label: string;
-  value: number;
-  tooltip: string;
-  accent: string;
-  carregando?: boolean;
+  dot: string;
+  /** `null` enquanto o dado da integração ainda está carregando. */
+  qtd: number | null;
+  total: number;
+  ativa: boolean;
+  apagada: boolean;
+  destacada?: boolean;
+  corPct?: string;
+  onClick: () => void;
+  title: string;
 }): React.JSX.Element {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Card className="cursor-default rounded-xl text-left">
-          <CardContent className="flex flex-col gap-3 p-5">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Icon className="h-5 w-5 shrink-0" style={{ color: accent }} />
-              <h3 className="text-sm font-semibold">{label}</h3>
-            </div>
-            {carregando ? (
-              <Skeleton className="h-9 w-12" />
-            ) : (
-              <span className="text-3xl font-bold tabular-nums text-foreground">{value}</span>
-            )}
-          </CardContent>
-        </Card>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** Cabeçalho de coluna clicável que ordena a tabela pelo `campo` indicado. */
-function ThOrdenavel({
-  campo,
-  label,
-  ordenacao,
-  onSort,
-  className,
-}: {
-  campo: CampoOrdem;
-  label: string;
-  ordenacao: Ordenacao;
-  onSort: (campo: CampoOrdem) => void;
-  className?: string;
-}): React.JSX.Element {
-  const ativo = ordenacao.campo === campo;
-  return (
-    <th className={cn('px-4 py-3 text-left font-medium', className)}>
-      <button
-        type="button"
-        onClick={() => onSort(campo)}
-        className={cn(
-          'group inline-flex items-center gap-1 font-medium hover:text-foreground',
-          ativo && 'text-foreground',
-        )}
-      >
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativa}
+      title={title}
+      className={cn(
+        'flex min-w-0 flex-col gap-1 rounded-[10px] px-2.5 py-2 text-left transition-[opacity,background-color] duration-150 hover:bg-slate-50',
+        ativa && RESUMO_SELECIONADO,
+        apagada && 'opacity-[0.45]',
+        destacada && 'bg-slate-50 opacity-100 ring-1 ring-border',
+      )}
+    >
+      <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-600">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} />
         {label}
-        {ativo ? (
-          ordenacao.dir === 'asc' ? (
-            <ArrowUp className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowDown className="h-3.5 w-3.5" />
-          )
+      </span>
+      <span className="flex items-baseline gap-1.5 tabular-nums">
+        {qtd === null ? (
+          <Skeleton className="h-7 w-10" />
         ) : (
-          <ChevronsUpDown className="h-3.5 w-3.5 opacity-40 group-hover:opacity-100" />
+          <>
+            <span className="text-xl font-bold text-foreground">{n0(qtd)}</span>
+            <span className="text-xs font-semibold" style={{ color: corPct }}>
+              {pct1(qtd, total || 1)}
+            </span>
+          </>
         )}
-      </button>
-    </th>
+      </span>
+    </button>
   );
 }

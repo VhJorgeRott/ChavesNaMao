@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { CalendarDays, Loader2, SearchCheck } from 'lucide-react';
+import { CalendarDays, SearchCheck } from 'lucide-react';
 import { DataProvider } from '@/data/DataProvider';
 import { CarregarPersistidos } from '@/data/CarregarPersistidos';
 import { SessionProvider } from '@/auth/SessionProvider';
@@ -9,6 +9,7 @@ import { RequireAdmin } from '@/auth/RequireAdmin';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PaginaSkeleton } from '@/components/shared/skeletons';
 import { Login } from '@/pages/Login';
 import { AuthCallback } from '@/pages/AuthCallback';
 import { Unidades } from '@/pages/Unidades';
@@ -35,14 +36,6 @@ import { ModeloFvsEditor } from '@/pages/qualidade/ModeloFvsEditor';
 
 // Lazy: a Início carrega Recharts — mantém-no fora do bundle do login/portal.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })));
-
-function PageFallback(): React.JSX.Element {
-  return (
-    <div className="flex flex-1 items-center justify-center py-20">
-      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-    </div>
-  );
-}
 
 function App(): React.JSX.Element {
   return (
@@ -73,7 +66,7 @@ function App(): React.JSX.Element {
                 <Route
                   path="/dashboard"
                   element={
-                    <Suspense fallback={<PageFallback />}>
+                    <Suspense fallback={<PaginaSkeleton />}>
                       <Dashboard />
                     </Suspense>
                   }
